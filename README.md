@@ -71,6 +71,16 @@ Apple Health receives some CGM data hours late (Dexcom: about 3 h). gluciq there
 
 Prototype only: choosing Dexcom in setup (with sample history) holds back the last 3 h of sample readings; they arrive over time, or at once via Profile → *Simulate Apple Health sync*.
 
+## Dexcom Share (live values)
+
+Profile → Integrations → **Dexcom Share**: region, Dexcom username and password. gluciq logs in to Dexcom's Share service (the one the Dexcom Follow app uses; also used by pydexcom, Nightscout and xDrip), loads the last 24 h and then polls every 5 minutes. Readings arrive as live sensor values with Dexcom's trend arrow, so the Bolus calculator is pre-filled and the 3-hour Apple Health delay disappears. Later Apple Health copies of the same readings are de-duplicated (±2.5 min).
+
+- Credentials are stored only in the device keychain (`expo-secure-store`) and sent only to Dexcom; the app reconnects on start.
+- Requirements: Share turned on in the Dexcom app with at least one follower.
+- Unofficial: Dexcom can change this service; gluciq then falls back to typed values + Apple Health.
+- Browsers block Dexcom's server (no CORS), so it works in the native app. The web preview offers “Try with simulated values”.
+- Code: `src/services/dexcomShare/` (client with tests), `src/store/useDexcomShare.ts`, `src/app/profile/dexcom.tsx`. It has not yet been run against a real Dexcom account.
+
 ## Corrections
 
 - **Log one:** Home → **+ Insulin** → type **Correction** (the default), or use the Bolus tab with **0 g carbs** for a calculated correction (saved as a correction).

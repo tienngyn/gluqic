@@ -15,6 +15,7 @@ import { Screen, Section } from '@/components/ui/Screen';
 import { colors, radius, spacing } from '@/constants/theme';
 import { GlucoseHero } from '@/features/glucose/GlucoseHero';
 import { describeMatch } from '@/features/glucose/matchText';
+import { WeightCard } from '@/features/weight/WeightCard';
 import {
   useActiveInsulin,
   useDayNutrition,
@@ -108,6 +109,9 @@ export default function HomeScreen() {
               <MacroRow label="Fat" current={nutrition.totals.fat} target={nutrition.goals.fat} />
             </View>
           </Card>
+          <View style={styles.weight}>
+            <WeightCard now={now} />
+          </View>
         </Section>
       </Animated.View>
 
@@ -191,6 +195,7 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xxl },
   kcalRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: spacing.xl },
   macros: { gap: spacing.lg },
+  weight: { marginTop: spacing.md },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xxl },
   action: {
     flex: 1,

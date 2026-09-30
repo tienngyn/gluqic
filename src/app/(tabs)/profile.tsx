@@ -22,6 +22,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { colors, spacing } from '@/constants/theme';
 import { RAPID_INSULINS } from '@/domain/insulin/products';
 import { useAppStore } from '@/store/useAppStore';
+import { useDexcomShare } from '@/store/useDexcomShare';
 import type { GlucoseUnit } from '@/types/models';
 import { formatGlucose, formatMinuteOfDay } from '@/utils/format';
 
@@ -36,6 +37,7 @@ export default function ProfileScreen() {
   const updateProfile = useAppStore((s) => s.updateProfile);
   const resetDemoData = useAppStore((s) => s.resetDemoData);
   const delayedCount = useAppStore((s) => s.delayedGlucose.length);
+  const shareStatus = useDexcomShare((s) => s.status);
   const releaseDelayedSensor = useAppStore((s) => s.releaseDelayedSensor);
   const setpoints = useAppStore((s) => s.setpoints);
   const correctionSetpoints = useAppStore((s) => s.correctionSetpoints);
@@ -129,7 +131,15 @@ export default function ProfileScreen() {
         <Card padding={0}>
           <View style={styles.inset}>
             <ListRow icon={icon(HeartPulse)} label="Apple Health" detail="Choose what gluciq reads and writes" onPress={() => router.push('/profile/health')} />
-            <ListRow icon={icon(Radio)} label="CGM" detail="Dexcom, FreeStyle Libre" value="Coming later" valueMuted />
+            <ListRow
+              icon={icon(Radio)}
+              label="Dexcom Share"
+              detail="Live glucose every 5 minutes"
+              value={shareStatus === 'connected' ? 'Connected' : shareStatus === 'demo' ? 'Demo' : 'Connect'}
+              valueMuted={shareStatus === 'off' || shareStatus === 'error'}
+              onPress={() => router.push('/profile/dexcom')}
+            />
+            <ListRow icon={icon(Radio)} label="FreeStyle Libre" detail="LibreLinkUp" value="Coming later" valueMuted />
             <ListRow icon={icon(Database)} label="Food database" detail="Bundled sample foods · Open Food Facts ready" value="Offline" valueMuted />
             <ListRow icon={icon(Pen)} label="Smart insulin pens" value="Planned" valueMuted last />
           </View>

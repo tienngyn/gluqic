@@ -7,6 +7,7 @@ import { BolusTabButton, FloatingTabBar, TAB_ICONS, TabButton } from '@/componen
 import { colors } from '@/constants/theme';
 import { useNow } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
+import { SHARE_POLL_MIN, useDexcomShare } from '@/store/useDexcomShare';
 
 export default function TabLayout() {
   const onboarded = useAppStore((s) => s.onboarded);
@@ -16,6 +17,19 @@ export default function TabLayout() {
   useEffect(() => {
     releaseDelayedSensor(now);
   }, [now, releaseDelayedSensor]);
+
+  // Dexcom Share: reconnect with saved credentials, then poll every 5 minutes.
+  const restoreShare = useDexcomShare((s) => s.restore);
+  const syncShare = useDexcomShare((s) => s.sync);
+  const shareStatus = useDexcomShare((s) => s.status);
+  const lastShareSync = useDexcomShare((s) => s.lastSyncAt);
+  useEffect(() => {
+    void restoreShare();
+  }, [restoreShare]);
+  useEffect(() => {
+    if (shareStatus !== 'connected' && shareStatus !== 'demo') return;
+    if (!lastShareSync || now.getTime() - new Date(lastShareSync).getTime() >= SHARE_POLL_MIN * 60000) void syncShare(now);
+  }, [now, shareStatus, lastShareSync, syncShare]);
 
   if (!onboarded) return <Redirect href="/onboarding" />;
   return (

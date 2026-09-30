@@ -29,7 +29,7 @@ const SOURCES: { value: GlucoseSource; label: string }[] = [
 
 const SOURCE_NOTE: Record<GlucoseSource, string> = {
   dexcom:
-    'Dexcom shares readings with Apple Health about 3 hours late. That is fine for learning, but when you eat, type in the current value from the Dexcom app — gluciq never uses an old value as current.',
+    'Dexcom shares readings with Apple Health about 3 hours late. For live values, connect Dexcom Share later in Profile. Until then, type in the current value from the Dexcom app when you eat — gluciq never uses an old value as current.',
   libre:
     'Libre readings usually reach Apple Health only through third-party apps and can be delayed. When you eat, type in the current value from your Libre app.',
   'other-cgm':

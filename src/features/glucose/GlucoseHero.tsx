@@ -12,6 +12,7 @@ import { colors, radius, spacing } from '@/constants/theme';
 import { classify } from '@/domain/glucose/stats';
 import { useCurrentGlucose, useGlucoseWindow, useManualMatches } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
+import { useDexcomShare } from '@/store/useDexcomShare';
 import { formatGlucose, formatTime, relativeTime, toDisplayGlucose, TREND_META } from '@/utils/format';
 
 type Span = '3' | '6' | '12' | '24';
@@ -29,6 +30,7 @@ export function GlucoseHero({ now }: { now: Date }) {
   const [span, setSpan] = useState<Span>('6');
   const [scrub, setScrub] = useState<Point | null>(null);
   const source = useAppStore((s) => s.user.glucoseSource);
+  const shareStatus = useDexcomShare((s) => s.status);
   const { latest, trend, fresh } = useCurrentGlucose(now);
   // Same rule as the Bolus calculator: older than 15 min is not "current".
   const stale = !fresh;
@@ -125,6 +127,11 @@ export function GlucoseHero({ now }: { now: Date }) {
               + Enter current value
             </Text>
           </PressableScale>
+          {source === 'dexcom' && shareStatus === 'off' ? (
+            <Text variant="label" color="secondary" accessibilityRole="link" onPress={() => router.push('/profile/dexcom')}>
+              Get live values with Dexcom Share →
+            </Text>
+          ) : null}
         </View>
       ) : (
         <View style={styles.statusRow}>

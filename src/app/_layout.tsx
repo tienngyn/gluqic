@@ -50,6 +50,7 @@ export default function RootLayout() {
             <Stack.Screen name="profile/diabetes" />
             <Stack.Screen name="profile/goals" />
             <Stack.Screen name="profile/health" />
+            <Stack.Screen name="profile/dexcom" />
           </Stack>
         </ThemeProvider>
       </SafeAreaProvider>

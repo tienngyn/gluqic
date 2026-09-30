@@ -107,12 +107,17 @@ export function TextField({
   onChangeText,
   placeholder,
   multiline,
+  secure,
+  autoComplete,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
   multiline?: boolean;
+  /** Password entry: hidden text, no autocorrect. */
+  secure?: boolean;
+  autoComplete?: 'username' | 'password' | 'email' | 'off';
 }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -129,6 +134,10 @@ export function TextField({
         placeholderTextColor={colors.textMuted}
         selectionColor={colors.text}
         multiline={multiline}
+        secureTextEntry={secure}
+        autoCapitalize={secure || autoComplete ? 'none' : 'sentences'}
+        autoCorrect={!(secure || autoComplete)}
+        autoComplete={autoComplete}
         accessibilityLabel={label}
         style={[styles.input, styles.textInput, multiline && { minHeight: 64, textAlignVertical: 'top' }]}
       />

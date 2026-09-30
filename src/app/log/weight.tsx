@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { NumberField, parseNumber } from '@/components/forms/NumberField';
+import { Text } from '@/components/typography/Text';
 import { Button } from '@/components/ui/Button';
 import { Screen } from '@/components/ui/Screen';
 import { SheetHeader } from '@/components/ui/SheetHeader';
@@ -34,9 +35,20 @@ export default function LogWeight() {
       <View style={styles.stack}>
         <NumberField size="l" label="Weight" unit="kg" value={kg} onChangeText={setKg} error={error} autoFocus />
         <NumberField label="Body fat (optional)" unit="%" value={fat} onChangeText={setFat} error={fatError} />
+        <Text
+          variant="label"
+          color="secondary"
+          accessibilityRole="link"
+          style={styles.link}
+          onPress={() => {
+            router.back();
+            router.push('/weight');
+          }}>
+          See weight history →
+        </Text>
       </View>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({ stack: { gap: spacing.md } });
+const styles = StyleSheet.create({ stack: { gap: spacing.md }, link: { paddingVertical: spacing.sm } });
