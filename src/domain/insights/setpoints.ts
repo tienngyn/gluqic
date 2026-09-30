@@ -4,7 +4,7 @@
  */
 import type { BolusEvent, Insight, MealType, RatioSetpoint } from '@/types/models';
 
-import { summarizeOutcomes, type OutcomeSummary } from './similarMeals';
+import { correctionNote, summarizeOutcomes, type OutcomeSummary } from './similarMeals';
 
 const PLURAL: Record<MealType, string> = { breakfast: 'breakfasts', lunch: 'lunches', dinner: 'dinners', snack: 'snacks' };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -74,7 +74,9 @@ export function setpointInsight(c: SetpointComparison, unit: 'mg/dL' = 'mg/dL', 
   if (since.aboveAt2h / n >= 0.6) {
     return {
       ...base,
-      body: `Since your setpoint on ${when}, glucose was still above target 2 hours after ${since.aboveAt2h} of ${n} ${PLURAL[meal]}.${avgText}`,
+      body: since.corrected
+        ? `Since your setpoint on ${when}, glucose still ran high after ${since.aboveAt2h} of ${n} ${PLURAL[meal]}${correctionNote(since)}.${avgText}`
+        : `Since your setpoint on ${when}, glucose was still above target 2 hours after ${since.aboveAt2h} of ${n} ${PLURAL[meal]}.${avgText}`,
       suggestion: `Your ${meal} setpoint may be worth reviewing with your care team.`,
       tone: 'attention',
       confidence,
@@ -83,7 +85,9 @@ export function setpointInsight(c: SetpointComparison, unit: 'mg/dL' = 'mg/dL', 
   const improved = !before.withOutcome || since.inRangeAt2h / n > before.inRangeAt2h / before.withOutcome;
   return {
     ...base,
-    body: `Since your setpoint on ${when}, glucose was in range 2 hours after ${since.inRangeAt2h} of ${n} ${PLURAL[meal]}${beforeText}.${avgText}`,
+    body: `Since your setpoint on ${when}, glucose was in range 2 hours after ${since.inRangeAt2h} of ${n} ${PLURAL[meal]}${beforeText}.${
+      since.corrected ? ` ${since.corrected} needed a correction.` : ''
+    }${avgText}`,
     tone: improved ? 'positive' : 'neutral',
     confidence,
   };

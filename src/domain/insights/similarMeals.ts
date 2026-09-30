@@ -102,22 +102,48 @@ export type OutcomeSummary = {
   withOutcome: number;
   avgBefore: number | null;
   avg2h: number | null;
+  /** Above target at 2 h, or needed a correction afterwards. */
   aboveAt2h: number;
   belowAt2h: number;
   inRangeAt2h: number;
+  /** How many of `aboveAt2h` needed a correction. */
+  corrected: number;
 };
+
+export type MealOutcome = 'in-range' | 'high' | 'low' | 'corrected';
+
+/**
+ * A meal that needed a correction ran high, even if the 2 h reading looks
+ * fine — the correction is what brought it down.
+ */
+export function outcomeOf(e: BolusEvent, range: { low: number; high: number }): MealOutcome | null {
+  if (e.correctionAfter) return 'corrected';
+  if (e.glucose2h == null) return null;
+  if (e.glucose2h > range.high) return 'high';
+  if (e.glucose2h < range.low) return 'low';
+  return 'in-range';
+}
 
 export function summarizeOutcomes(events: BolusEvent[], range: { low: number; high: number }): OutcomeSummary {
   const before = events.map((e) => e.glucoseBefore).filter(Number.isFinite);
   const twoH = events.map((e) => e.glucose2h).filter((v): v is number => v != null);
   const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((s, v) => s + v, 0) / xs.length) : null);
+  const outcomes = events.map((e) => outcomeOf(e, range)).filter((o): o is MealOutcome => o != null);
+  const n = (o: MealOutcome) => outcomes.filter((x) => x === o).length;
   return {
     count: events.length,
-    withOutcome: twoH.length,
+    withOutcome: outcomes.length,
     avgBefore: avg(before),
     avg2h: avg(twoH),
-    aboveAt2h: twoH.filter((v) => v > range.high).length,
-    belowAt2h: twoH.filter((v) => v < range.low).length,
-    inRangeAt2h: twoH.filter((v) => v >= range.low && v <= range.high).length,
+    aboveAt2h: n('high') + n('corrected'),
+    belowAt2h: n('low'),
+    inRangeAt2h: n('in-range'),
+    corrected: n('corrected'),
   };
+}
+
+/** " (3 needed a correction)" or "" — appended after a count of high meals. */
+export function correctionNote(s: OutcomeSummary): string {
+  if (!s.corrected) return '';
+  return ` (${s.corrected === s.aboveAt2h && s.corrected > 1 ? 'all' : s.corrected} needed a correction)`;
 }

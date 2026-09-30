@@ -4,8 +4,9 @@
  * settings — see `containsDoseInstruction`, which every insight must pass.
  */
 import { computeStats, createReadingIndex, hourlyProfile } from '@/domain/glucose/stats';
+import { correctionInsight, type CorrectionAnalysis } from '@/domain/insights/corrections';
 import { compareSetpoint, setpointInsight } from '@/domain/insights/setpoints';
-import { summarizeOutcomes } from '@/domain/insights/similarMeals';
+import { correctionNote, outcomeOf, summarizeOutcomes } from '@/domain/insights/similarMeals';
 import type {
   ActivityEntry,
   BolusEvent,
@@ -48,6 +49,9 @@ export type PatternInput = {
   minSamples?: number;
   /** User-set carb-ratio setpoints; meal patterns start counting from the active one. */
   setpoints?: RatioSetpoint[];
+  /** From `analyzeCorrections`, compared against `correctionFactor`. */
+  corrections?: CorrectionAnalysis;
+  correctionFactor?: number;
 };
 
 function activeFor(setpoints: RatioSetpoint[] | undefined, mealType: MealType): RatioSetpoint | undefined {
@@ -63,7 +67,7 @@ export function detectMealPatterns({ events, range, now, minSamples = 6, setpoin
     // (counting only meals since the setpoint), so skip it here.
     if (activeFor(setpoints, mealType)) return;
     const recent = events
-      .filter((e) => e.mealType === mealType && e.glucose2h != null)
+      .filter((e) => e.mealType === mealType && outcomeOf(e, range) != null)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
       .slice(0, 10);
     if (recent.length < minSamples) return;
@@ -77,7 +81,9 @@ export function detectMealPatterns({ events, range, now, minSamples = 6, setpoin
         id: `pattern-${mealType}-high`,
         type: 'meal-pattern',
         title: `${label.one} pattern`,
-        body: `Glucose was above target 2 hours after ${s.aboveAt2h} of your last ${s.withOutcome} ${label.many}.`,
+        body: s.corrected
+          ? `Glucose ran high after ${s.aboveAt2h} of your last ${s.withOutcome} ${label.many}${correctionNote(s)}.`
+          : `Glucose was above target 2 hours after ${s.aboveAt2h} of your last ${s.withOutcome} ${label.many}.`,
         suggestion: `Your ${mealType} carb ratio may be worth reviewing with your care team.`,
         confidence: Math.min(1, s.withOutcome / 10) * aboveShare,
         tone: 'attention',
@@ -270,9 +276,16 @@ export function detectSetpointOutcomes({ events, range, now, setpoints }: Patter
     .map((s) => setpointInsight(compareSetpoint(s, events, range), 'mg/dL', now));
 }
 
+export function detectCorrectionPatterns({ corrections, correctionFactor, now }: PatternInput): Insight[] {
+  if (!corrections || !correctionFactor) return [];
+  const i = correctionInsight(corrections, correctionFactor, now);
+  return i ? [i] : [];
+}
+
 export function detectPatterns(input: PatternInput): Insight[] {
   const all = [
     ...detectSetpointOutcomes(input),
+    ...detectCorrectionPatterns(input),
     ...detectWeeklyTrend(input),
     ...detectMealPatterns(input),
     ...detectTimeOfDayPatterns(input),

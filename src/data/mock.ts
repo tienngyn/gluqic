@@ -10,6 +10,7 @@
  *  - delayed rises after high-fat dinners
  */
 import { roundDownToIncrement } from '@/domain/bolus/engine';
+import { iobFraction } from '@/domain/insulin/iob';
 import { mealTotals, scaleNutrients } from '@/domain/nutrition/totals';
 import type {
   ActivityEntry,
@@ -202,6 +203,10 @@ export type SeedData = {
   setpoints: RatioSetpoint[];
 };
 
+/** mg/dL per unit the simulated body actually responds with (profile says 35). */
+const SIMULATED_CF = 50;
+const IOB_MODEL = { durationHours: 4.5, peakMinutes: 75 };
+
 /** The demo user set a breakfast setpoint this many days ago. */
 const SETPOINT_DAYS_AGO = 14;
 const BREAKFAST_RATIO_BEFORE = 5;
@@ -261,6 +266,7 @@ export function generateSeedData(now: Date = new Date()): SeedData {
         userId: USER_ID,
         units,
         insulinType: 'rapid',
+        purpose: 'meal',
         source: rng() < 0.5 ? 'bolus-calculator' : 'manual',
         timestamp: atMinute(day, minute - Math.round(between(rng, 5, 15))).toISOString(),
       });
@@ -274,14 +280,48 @@ export function generateSeedData(now: Date = new Date()): SeedData {
     };
 
     // Breakfast runs high: the simulated body needs ~4 g/U, profile says 5.
+    // A correction when the simulated glucose is high at `minute`. Sized with
+    // the profile's factor (35); the simulated body responds more (50/U), so
+    // the correction insight has something to find. After a meal the spike is
+    // already falling, so people aim higher (`aim`) and wait for a clear high.
+    const addCorrection = (minute: number, threshold = 175, aim = mockInsulinProfile.targetGlucose) => {
+      const at = atMinute(day, minute);
+      if (at.getTime() > nowMs) return;
+      const expected = base + effects.reduce((sum, f) => sum + f(minute), 0);
+      if (expected < threshold) return;
+      const units = roundDownToIncrement((expected - aim) / mockInsulinProfile.correctionFactor, 0.5);
+      if (units < 1) return;
+      insulin.push({
+        id: `corr_${dayKey(day)}_${minute}`,
+        userId: USER_ID,
+        units,
+        insulinType: 'rapid',
+        purpose: 'correction',
+        source: rng() < 0.5 ? 'bolus-calculator' : 'manual',
+        timestamp: at.toISOString(),
+      });
+      effects.push((m) => (m <= minute ? 0 : -units * SIMULATED_CF * (1 - iobFraction(m - minute, IOB_MODEL))));
+    };
+
     // Before the setpoint breakfast was dosed at 1:5 and often ran high. The
     // extra insulin at 1:4.6 lowers the excursion by (1/4.6 − 1/5) × CF per gram.
     const afterSetpoint = day.getTime() + 7 * 60 * MIN >= setpointMs;
     const breakfastRatio = afterSetpoint ? setpoint.gramsPerUnit : BREAKFAST_RATIO_BEFORE;
     const breakfastK = 1.75 - (1 / breakfastRatio - 1 / BREAKFAST_RATIO_BEFORE) * mockInsulinProfile.correctionFactor;
-    addMeal('breakfast', pick(rng, BREAKFASTS), Math.round(between(rng, 450, 500)), breakfastK, 70, breakfastRatio);
+    const breakfastAt = Math.round(between(rng, 450, 500));
+    addMeal('breakfast', pick(rng, BREAKFASTS), breakfastAt, breakfastK, 70, breakfastRatio);
+    if (rng() < 0.6) addCorrection(breakfastAt + Math.round(between(rng, 140, 170)), 205, 160);
     addMeal('lunch', pick(rng, LUNCHES), Math.round(between(rng, 735, 795)), 0.55, 65);
-    if (rng() < 0.55) addMeal('snack', pick(rng, SNACKS), Math.round(between(rng, 915, 960)), 0.7, 45);
+    // Some afternoons run high without food (stress, a missed site change...)
+    // and get a correction instead of a snack.
+    if (!workoutDay && rng() < 0.3) {
+      const rise = between(rng, 60, 90);
+      const smooth = (m: number, a: number, b: number) => Math.min(1, Math.max(0, (m - a) / (b - a)));
+      effects.push((m) => rise * smooth(m, 840, 900) * (1 - smooth(m, 1230, 1350)));
+      addCorrection(Math.round(between(rng, 920, 935)));
+    } else if (rng() < 0.55) {
+      addMeal('snack', pick(rng, SNACKS), Math.round(between(rng, 915, 960)), 0.7, 45);
+    }
 
     if (workoutDay) {
       const start = Math.round(between(rng, 1060, 1100));

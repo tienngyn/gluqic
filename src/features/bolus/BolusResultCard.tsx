@@ -60,7 +60,7 @@ export function BolusResultCard({
     <Animated.View entering={FadeIn.duration(300)} layout={LinearTransition.springify().damping(20)}>
       <Card style={styles.card} variant="elevated">
         <Text variant="label" color="secondary" align="center">
-          {result.blocked ? 'No insulin suggested' : 'Suggested'}
+          {result.blocked ? 'No insulin suggested' : input.carbsGrams === 0 ? 'Suggested correction' : 'Suggested'}
         </Text>
         <View style={styles.valueRow} accessibilityLabel={`Suggested ${b.suggestedBolus.toFixed(1)} units`}>
           <Text variant="display" color={result.blocked ? 'red' : 'primary'}>
@@ -130,7 +130,8 @@ export function BolusResultCard({
         {similar && similar.withOutcome >= 3 ? (
           <Text variant="callout" color="secondary" style={styles.whyBody}>
             {similar.count} similar {mealLabel}s{setpointSince ? ' since your setpoint' : ''} were analyzed. Two hours later glucose was in range after{' '}
-            {similar.inRangeAt2h} and above range after {similar.aboveAt2h}. This history is shown for context — it does
+            {similar.inRangeAt2h} and ran high after {similar.aboveAt2h}
+            {similar.corrected ? ` (${similar.corrected} needed a correction)` : ''}. This history is shown for context — it does
             not change the suggestion.
           </Text>
         ) : null}

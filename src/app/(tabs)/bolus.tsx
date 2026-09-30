@@ -142,7 +142,7 @@ export default function BolusScreen() {
   const takeDiffers = suggested != null && take != null && Math.abs(take - suggested) >= 0.05;
   const takeOverMax = take != null && take > profile.maxBolus;
   const proposal =
-    result.ok && takeDiffers && take != null && ratio
+    result.ok && result.input.carbsGrams > 0 && takeDiffers && take != null && ratio
       ? proposeSetpoint({
           unitsTaken: take,
           carbs: result.input.carbsGrams,
@@ -240,7 +240,13 @@ export default function BolusScreen() {
               onChangeText={field.onChange}
               onBlur={field.onBlur}
               error={fieldError('carbs')}
-              hint={draft ? `From ${draft.source}` : undefined}
+              hint={
+                draft && draft.carbs > 0
+                  ? `From ${draft.source}`
+                  : field.value.trim() === '0'
+                    ? 'Correction only — saved as a correction'
+                    : 'Enter 0 for a correction without food'
+              }
             />
           )}
         />

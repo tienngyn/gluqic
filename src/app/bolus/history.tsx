@@ -34,7 +34,7 @@ export default function BolusHistory() {
                     {formatDay(c.timestamp)} · {formatTime(c.timestamp)}
                   </Text>
                   <Text variant="bodyStrong" style={styles.meal}>
-                    {MEAL_LABEL[c.mealType]} · {Math.round(c.carbs)} g
+                    {c.carbs > 0 ? `${MEAL_LABEL[c.mealType]} · ${Math.round(c.carbs)} g` : 'Correction'}
                   </Text>
                 </View>
                 <View style={styles.units}>

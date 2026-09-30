@@ -26,7 +26,9 @@ function describe(e: TimelineEvent, unit: GlucoseUnit): { title: string; detail?
       };
     case 'insulin':
       return {
-        title: `${e.data.units} U ${e.data.insulinType === 'long' ? 'basal' : 'insulin'}`,
+        title: `${e.data.units} U ${
+          e.data.insulinType === 'long' ? 'basal' : e.data.purpose === 'correction' ? 'correction' : 'insulin'
+        }`,
         detail: e.data.source === 'bolus-calculator' ? 'From bolus calculator' : undefined,
         glyph: '≡',
       };

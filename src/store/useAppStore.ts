@@ -171,6 +171,7 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
               userId: USER_ID,
               units,
               insulinType: 'rapid',
+              purpose: calc.carbs > 0 ? 'meal' : 'correction',
               source: 'bolus-calculator',
               calculationId: saved.id,
               timestamp: calc.timestamp,

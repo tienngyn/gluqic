@@ -13,7 +13,7 @@ import { Screen, Section } from '@/components/ui/Screen';
 import { ChipGroup, SegmentedControl } from '@/components/ui/SegmentedControl';
 import { colors, radius, spacing } from '@/constants/theme';
 import { hourlyProfile } from '@/domain/glucose/stats';
-import { findSimilarMeals, signatureOf, summarizeOutcomes } from '@/domain/insights/similarMeals';
+import { correctionNote, findSimilarMeals, signatureOf, summarizeOutcomes } from '@/domain/insights/similarMeals';
 import { useActiveSetpoint, useBolusEvents, useGlucoseStats, useInsights, useNow } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import type { GlucoseReading, GlucoseUnit } from '@/types/models';
@@ -215,8 +215,8 @@ export default function InsightsScreen() {
                 </View>
               </View>
               <Text variant="callout" style={styles.simBody}>
-                Glucose was above target after {similarBreakfast.summary.aboveAt2h} of {similarBreakfast.summary.withOutcome} similar
-                breakfasts.
+                Glucose ran high after {similarBreakfast.summary.aboveAt2h} of {similarBreakfast.summary.withOutcome} similar
+                breakfasts{correctionNote(similarBreakfast.summary)}.
               </Text>
               {similarBreakfast.summary.aboveAt2h / similarBreakfast.summary.withOutcome >= 0.5 ? (
                 <Text variant="label" color="secondary" style={styles.simHint}>

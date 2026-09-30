@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { computeStats, computeTrend, createReadingIndex, latestReading } from '@/domain/glucose/stats';
 import { buildBolusEvents } from '@/domain/insights/bolusEvents';
 import { activeSetpoint } from '@/domain/bolus/setpoint';
+import { analyzeCorrections } from '@/domain/insights/corrections';
 import { detectPatterns, detectSetpointOutcomes } from '@/domain/insights/patterns';
 import { activeInsulin } from '@/domain/insulin/iob';
 import { caloriesByMealType, dayTotals } from '@/domain/nutrition/totals';
@@ -97,8 +98,23 @@ export function useBolusEvents() {
   return useMemo(() => buildBolusEvents(meals, insulin, glucose, activities), [meals, insulin, glucose, activities]);
 }
 
+export function useCorrectionAnalysis(days: number, now: Date) {
+  const insulin = useAppStore((s) => s.insulin);
+  const meals = useAppStore((s) => s.meals);
+  const glucose = useAppStore((s) => s.glucose);
+  const low = useAppStore((s) => s.range.low);
+  return useMemo(() => {
+    const from = now.getTime() - days * DAY;
+    const inWindow = insulin.filter((d) => new Date(d.timestamp).getTime() >= from);
+    return analyzeCorrections(inWindow, meals, glucose, low);
+  }, [insulin, meals, glucose, low, days, now]);
+}
+
 export function useInsights(days: number, now: Date): Insight[] {
   const setpoints = useAppStore((s) => s.setpoints);
+  const correctionFactor = useAppStore((s) => s.insulinProfile.correctionFactor);
+  // Corrections need a longer look-back to collect enough clean samples.
+  const corrections = useCorrectionAnalysis(Math.max(days, 90), now);
   const glucose = useAppStore((s) => s.glucose);
   const activities = useAppStore((s) => s.activities);
   const range = useAppStore((s) => s.range);
@@ -124,8 +140,10 @@ export function useInsights(days: number, now: Date): Insight[] {
       minSamples: days <= 7 ? 5 : 6,
       // Setpoint outcomes always look at every meal since the setpoint.
       setpoints,
+      corrections,
+      correctionFactor,
     }).map((i) => (i.type === 'setpoint' ? (setpointById.get(i.id) ?? i) : i));
-  }, [events, glucose, activities, range, days, now, setpoints, setpointById]);
+  }, [events, glucose, activities, range, days, now, setpoints, setpointById, corrections, correctionFactor]);
 }
 
 export function useTimeline(day: Date): TimelineEvent[] {

@@ -59,6 +59,14 @@ ratio     = carbs ÷ mealUnits                            e.g. 72 g ÷ 15.6 U = 
 
 The demo data includes a breakfast setpoint from 14 days ago (1 U : 5 g → 1 U : 4.6 g).
 
+## Corrections
+
+- **Log one:** Home → **+ Insulin** → type **Correction** (the default), or use the Bolus tab with **0 g carbs** for a calculated correction (saved as a correction).
+- **Active insulin:** every rapid dose, meal or correction, counts as insulin on board and is subtracted in the next calculation.
+- **Meal learning:** a meal followed by a correction (20 min – 3 h later) counts as having run high, even if the 2 h reading looks fine. Correction doses are never mistaken for the meal dose. Untagged doses are classified by timing (within 45 min of a meal → meal dose).
+- **Correction learning:** `analyzeCorrections` looks at clean corrections (no meal 2.5 h before / 3 h after, no other rapid insulin ±3 h), measures the drop per unit (lowest reading 2–4 h later), and compares the median with your correction factor. More than 20 % off, or repeated lows after corrections → suggests reviewing the correction factor. It never changes it.
+- Logic: `src/domain/insulin/purpose.ts`, `src/domain/insights/corrections.ts`, `bolusEvents.ts`, `similarMeals.ts` (with tests).
+
 ## Architecture
 
 ```

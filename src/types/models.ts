@@ -48,6 +48,11 @@ export type InsulinDose = {
   insulinType?: 'rapid' | 'long' | 'other';
   timestamp: string;
   source: 'manual' | 'bolus-calculator';
+  /**
+   * Why rapid insulin was taken. Older entries may lack it; see
+   * `classifyDose`, which infers it from timing.
+   */
+  purpose?: 'meal' | 'correction';
   /** Links a dose to the calculation that produced the suggestion. */
   calculationId?: string;
   note?: string;
@@ -254,6 +259,8 @@ export type BolusEvent = {
   glucose4h?: number;
   mealId?: string;
   mealName?: string;
+  /** Correction insulin taken 20 min – 3 h after the meal. */
+  correctionAfter?: number;
 };
 
 export type InsightKind =
@@ -264,6 +271,7 @@ export type InsightKind =
   | 'overnight'
   | 'trend'
   | 'setpoint'
+  | 'correction'
   | 'positive';
 
 export type Insight = {

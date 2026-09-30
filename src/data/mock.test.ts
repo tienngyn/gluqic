@@ -1,5 +1,6 @@
 import { computeStats, DEFAULT_RANGE } from '@/domain/glucose/stats';
 import { buildBolusEvents } from '@/domain/insights/bolusEvents';
+import { analyzeCorrections } from '@/domain/insights/corrections';
 import { containsDoseInstruction, detectPatterns } from '@/domain/insights/patterns';
 import { activeInsulin } from '@/domain/insulin/iob';
 
@@ -27,7 +28,8 @@ describe('seed data', () => {
   it('looks like a plausible, mostly-in-range person', () => {
     const stats = computeStats(seed.glucose, DEFAULT_RANGE);
     if (process.env.SEED_DEBUG) console.log(stats);
-    expect(stats.timeInRange).toBeGreaterThanOrEqual(65);
+    expect(stats.timeInRange).toBeGreaterThanOrEqual(70);
+    expect(stats.timeBelow).toBeLessThanOrEqual(6);
     expect(stats.timeInRange).toBeLessThanOrEqual(92);
     expect(stats.average).toBeGreaterThan(110);
     expect(stats.average).toBeLessThan(160);
@@ -44,10 +46,12 @@ describe('seed data', () => {
       range: DEFAULT_RANGE,
       now,
       setpoints: seed.setpoints,
+      corrections: analyzeCorrections(seed.insulin, seed.meals, seed.glucose),
+      correctionFactor: seed.insulinProfile.correctionFactor,
     });
     if (process.env.SEED_DEBUG) console.log(insights.map((i) => `${i.title}: ${i.body}`));
     const types = insights.map((i) => i.type);
-    expect(types).toEqual(expect.arrayContaining(['setpoint', 'exercise']));
+    expect(types).toEqual(expect.arrayContaining(['setpoint', 'correction', 'exercise']));
     const sp = insights.find((i) => i.type === 'setpoint');
     expect(sp?.tone).toBe('positive');
     for (const i of insights) expect(containsDoseInstruction(`${i.body} ${i.suggestion ?? ''}`)).toBe(false);
