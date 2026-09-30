@@ -1,6 +1,7 @@
 import { computeStats, DEFAULT_RANGE } from '@/domain/glucose/stats';
 import { buildBolusEvents } from '@/domain/insights/bolusEvents';
 import { analyzeCorrections } from '@/domain/insights/corrections';
+import { suggestCorrectionFactor, suggestRatio } from '@/domain/insights/suggestions';
 import { containsDoseInstruction, detectPatterns } from '@/domain/insights/patterns';
 import { activeInsulin } from '@/domain/insulin/iob';
 
@@ -55,5 +56,22 @@ describe('seed data', () => {
     const sp = insights.find((i) => i.type === 'setpoint');
     expect(sp?.tone).toBe('positive');
     for (const i of insights) expect(containsDoseInstruction(`${i.body} ${i.suggestion ?? ''}`)).toBe(false);
+  });
+
+  it('offers one-tap suggestions for lunch and the correction factor', () => {
+    const events = buildBolusEvents(seed.meals, seed.insulin, seed.glucose, seed.activities, 270);
+    const lunch = seed.insulinProfile.carbRatios.find((c) => c.mealType === 'lunch')!;
+    const ratio = suggestRatio(lunch, events, DEFAULT_RANGE, { now });
+    const corr = suggestCorrectionFactor(
+      analyzeCorrections(seed.insulin, seed.meals, seed.glucose, 70, { activities: seed.activities }),
+      seed.insulinProfile.correctionFactor,
+      undefined,
+      { now },
+    );
+    if (process.env.SEED_DEBUG) console.log(JSON.stringify({ ratio, corr }, null, 1));
+    expect(ratio).toMatchObject({ direction: 'more' });
+    expect(ratio!.insulinChange).toBeLessThanOrEqual(0.11);
+    expect(corr).not.toBeNull();
+    expect(Math.abs(corr!.insulinChange)).toBeLessThanOrEqual(0.11);
   });
 });

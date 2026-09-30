@@ -14,6 +14,11 @@ export function buildBolusEvents(
   doses: InsulinDose[],
   readings: GlucoseReading[],
   activities: ActivityEntry[] = [],
+  /**
+   * A correction up to this long after a meal counts as needed for that meal.
+   * Use the insulin duration: a high while meal insulin still acts is the meal's.
+   */
+  correctionWindowMin = 180,
 ): BolusEvent[] {
   const mealDoses: InsulinDose[] = [];
   const corrections: { t: number; units: number }[] = [];
@@ -28,7 +33,7 @@ export function buildBolusEvents(
     const t = new Date(meal.timestamp).getTime();
     const dose = nearest(mealDoses, t, MEAL_DOSE_WINDOW_MIN);
     const correctionAfter = corrections
-      .filter((c) => c.t >= t + 20 * MIN && c.t <= t + 3 * 60 * MIN)
+      .filter((c) => c.t >= t + 20 * MIN && c.t <= t + correctionWindowMin * MIN)
       .reduce((sum, c) => sum + c.units, 0);
     const before = index.near(new Date(t - 5 * MIN), 20);
     const at = (h: number) => index.near(new Date(t + h * 60 * MIN), 20)?.value;

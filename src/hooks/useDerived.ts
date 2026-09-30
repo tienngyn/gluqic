@@ -9,6 +9,7 @@ import { computeStats, computeTrend, createReadingIndex, latestReading, SENSOR_F
 import { buildBolusEvents } from '@/domain/insights/bolusEvents';
 import { activeCorrectionSetpoint, activeSetpoint } from '@/domain/bolus/setpoint';
 import { analyzeCorrections } from '@/domain/insights/corrections';
+import { suggestCorrectionFactor, suggestRatio, type SettingSuggestion } from '@/domain/insights/suggestions';
 import { detectPatterns, detectSetpointOutcomes } from '@/domain/insights/patterns';
 import { activeInsulin } from '@/domain/insulin/iob';
 import { caloriesByMealType, dayTotals } from '@/domain/nutrition/totals';
@@ -126,7 +127,11 @@ export function useBolusEvents() {
   const insulin = useAppStore((s) => s.insulin);
   const glucose = useGlucose();
   const activities = useAppStore((s) => s.activities);
-  return useMemo(() => buildBolusEvents(meals, insulin, glucose, activities), [meals, insulin, glucose, activities]);
+  const durationHours = useAppStore((s) => s.insulinProfile.insulinDurationHours);
+  return useMemo(
+    () => buildBolusEvents(meals, insulin, glucose, activities, durationHours * 60),
+    [meals, insulin, glucose, activities, durationHours],
+  );
 }
 
 export function useActiveCorrectionSetpoint(): CorrectionSetpoint | undefined {
@@ -134,18 +139,51 @@ export function useActiveCorrectionSetpoint(): CorrectionSetpoint | undefined {
   return useMemo(() => activeCorrectionSetpoint(setpoints), [setpoints]);
 }
 
-/** Corrections in the last `days`, or only since the active correction setpoint. */
+/**
+ * Corrections in the last `days`, but never from before the correction
+ * factor last changed (or the active correction setpoint).
+ */
 export function useCorrectionAnalysis(days: number, now: Date) {
   const setpoint = useActiveCorrectionSetpoint();
   const insulin = useAppStore((s) => s.insulin);
   const meals = useAppStore((s) => s.meals);
+  const activities = useAppStore((s) => s.activities);
   const glucose = useGlucose();
   const low = useAppStore((s) => s.range.low);
+  const profile = useAppStore((s) => s.insulinProfile);
   return useMemo(() => {
-    const from = setpoint ? new Date(setpoint.createdAt).getTime() : now.getTime() - days * DAY;
-    const inWindow = insulin.filter((d) => new Date(d.timestamp).getTime() >= from);
-    return analyzeCorrections(inWindow, meals, glucose, low);
-  }, [insulin, meals, glucose, low, days, now, setpoint]);
+    const since = Math.max(
+      now.getTime() - days * DAY,
+      setpoint ? new Date(setpoint.createdAt).getTime() : 0,
+      profile.correctionFactorChangedAt ? new Date(profile.correctionFactorChangedAt).getTime() : 0,
+    );
+    return analyzeCorrections(insulin, meals, glucose, low, {
+      since,
+      activities,
+      model: { durationHours: profile.insulinDurationHours, peakMinutes: profile.insulinPeakMinutes },
+    });
+  }, [insulin, meals, activities, glucose, low, days, now, setpoint, profile]);
+}
+
+/** One-tap setting suggestions (carb ratios for main meals, correction factor). */
+export function useSuggestions(now: Date): SettingSuggestion[] {
+  const events = useBolusEvents();
+  const corrections = useCorrectionAnalysis(90, now);
+  const profile = useAppStore((s) => s.insulinProfile);
+  const range = useAppStore((s) => s.range);
+  const dismissed = useAppStore((s) => s.dismissedSuggestions);
+  return useMemo(() => {
+    const ctx = { now, dismissed };
+    const out: SettingSuggestion[] = [];
+    for (const w of profile.carbRatios) {
+      if (w.mealType === 'snack') continue;
+      const s = suggestRatio(w, events, range, ctx);
+      if (s) out.push(s);
+    }
+    const c = suggestCorrectionFactor(corrections, profile.correctionFactor, profile.correctionFactorChangedAt, ctx);
+    if (c) out.push(c);
+    return out;
+  }, [events, corrections, profile, range, dismissed, now]);
 }
 
 export function useInsights(days: number, now: Date): Insight[] {

@@ -20,6 +20,7 @@ import { ListRow } from '@/components/ui/ListRow';
 import { Screen, Section } from '@/components/ui/Screen';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { colors, spacing } from '@/constants/theme';
+import { RAPID_INSULINS } from '@/domain/insulin/products';
 import { useAppStore } from '@/store/useAppStore';
 import type { GlucoseUnit } from '@/types/models';
 import { formatGlucose, formatMinuteOfDay } from '@/utils/format';
@@ -78,7 +79,11 @@ export default function ProfileScreen() {
               value={`1 U : ${formatGlucose(profile.correctionFactor, unit)}`}
               onPress={() => router.push('/profile/diabetes')}
             />
-            <ListRow label="Insulin duration" value={`${profile.insulinDurationHours} h`} onPress={() => router.push('/profile/diabetes')} />
+            <ListRow
+              label="Insulin"
+              value={`${RAPID_INSULINS[profile.rapidInsulin ?? 'other'].label} · ${profile.insulinDurationHours} h`}
+              onPress={() => router.push('/profile/diabetes')}
+            />
             <ListRow label="Max bolus" value={`${profile.maxBolus} U`} onPress={() => router.push('/profile/diabetes')} last />
           </View>
         </Card>

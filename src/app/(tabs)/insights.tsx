@@ -14,7 +14,8 @@ import { ChipGroup, SegmentedControl } from '@/components/ui/SegmentedControl';
 import { colors, radius, spacing } from '@/constants/theme';
 import { hourlyProfile } from '@/domain/glucose/stats';
 import { correctionNote, findSimilarMeals, signatureOf, summarizeOutcomes } from '@/domain/insights/similarMeals';
-import { useActiveSetpoint, useBolusEvents, useGlucoseStats, useInsights, useNow } from '@/hooks/useDerived';
+import { SuggestionCard } from '@/features/insights/SuggestionCard';
+import { useActiveSetpoint, useBolusEvents, useGlucoseStats, useInsights, useNow, useSuggestions } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import type { GlucoseReading, GlucoseUnit } from '@/types/models';
 import { formatGlucose, formatShortDate, MEAL_LABEL, toDisplayGlucose } from '@/utils/format';
@@ -48,6 +49,7 @@ export default function InsightsScreen() {
 
   const { readings, previousReadings, stats, previousStats } = useGlucoseStats(days, now);
   const insights = useInsights(Math.max(days, 14), now);
+  const suggestions = useSuggestions(now);
   const events = useBolusEvents();
   const breakfastSetpoint = useActiveSetpoint('breakfast');
 
@@ -233,6 +235,16 @@ export default function InsightsScreen() {
                 </Text>
               ) : null}
             </Card>
+          </Section>
+        ) : null}
+
+        {suggestions.length ? (
+          <Section title="Suggestions">
+            <View style={styles.patterns}>
+              {suggestions.map((s) => (
+                <SuggestionCard key={s.key} suggestion={s} />
+              ))}
+            </View>
           </Section>
         ) : null}
 

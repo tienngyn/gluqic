@@ -11,7 +11,9 @@ import { Button } from '@/components/ui/Button';
 import { Screen, Section } from '@/components/ui/Screen';
 import { ChipGroup } from '@/components/ui/SegmentedControl';
 import { spacing } from '@/constants/theme';
+import { RAPID_INSULIN_OPTIONS, RAPID_INSULINS } from '@/domain/insulin/products';
 import { useAppStore } from '@/store/useAppStore';
+import type { RapidInsulin } from '@/types/models';
 import { formatMinuteOfDay, fromDisplayGlucose, toDisplayGlucose } from '@/utils/format';
 import { haptics } from '@/utils/haptics';
 
@@ -30,9 +32,15 @@ export default function DiabetesSettings() {
   const updateInsulinProfile = useAppStore((s) => s.updateInsulinProfile);
   const updateCarbRatio = useAppStore((s) => s.updateCarbRatio);
 
-  const [f, setF] = useState({
+  const [initial] = useState(() => ({
     target: String(toDisplayGlucose(profile.targetGlucose, unit)),
     cf: String(toDisplayGlucose(profile.correctionFactor, unit)),
+    minG: String(toDisplayGlucose(profile.minGlucoseForBolus, unit)),
+  }));
+  const [insulin, setInsulin] = useState<RapidInsulin>(profile.rapidInsulin ?? 'novorapid');
+  const [f, setF] = useState({
+    target: initial.target,
+    cf: initial.cf,
     dia: String(profile.insulinDurationHours),
     max: String(profile.maxBolus),
     minG: String(toDisplayGlucose(profile.minGlucoseForBolus, unit)),
@@ -72,11 +80,15 @@ export default function DiabetesSettings() {
   const save = () => {
     if (!valid) return;
     updateInsulinProfile({
-      targetGlucose: target,
-      correctionFactor: cf,
+      // Untouched fields keep their exact stored value (no unit round-trip),
+      // so learning does not restart for a value that did not change.
+      targetGlucose: f.target === initial.target ? profile.targetGlucose : target,
+      correctionFactor: f.cf === initial.cf ? profile.correctionFactor : cf,
       insulinDurationHours: dia!,
+      rapidInsulin: insulin,
+      insulinPeakMinutes: RAPID_INSULINS[insulin].peakMinutes,
       maxBolus: max!,
-      minGlucoseForBolus: minG,
+      minGlucoseForBolus: f.minG === initial.minG ? profile.minGlucoseForBolus : minG,
       doseIncrement: Number(f.increment),
     });
     ratios.forEach((r) =>
@@ -98,6 +110,13 @@ export default function DiabetesSettings() {
         <NumberField style={styles.flex} label="Target" unit={unit} value={f.target} onChangeText={set('target')} error={errors.target} decimal={unit === 'mmol/L'} />
         <NumberField style={styles.flex} label="Correction factor" unit={`${unit}/U`} value={f.cf} onChangeText={set('cf')} error={errors.cf} decimal={unit === 'mmol/L'} />
       </View>
+      <Text variant="label" color="secondary" style={styles.label}>
+        Rapid-acting insulin
+      </Text>
+      <ChipGroup<RapidInsulin> value={insulin} onChange={setInsulin} options={RAPID_INSULIN_OPTIONS} />
+      <Text variant="caption" color="muted" style={styles.caption}>
+        Peak action after about {RAPID_INSULINS[insulin].peakMinutes} min — used for active insulin.
+      </Text>
       <View style={styles.row}>
         <NumberField style={styles.flex} label="Insulin duration" unit="h" value={f.dia} onChangeText={set('dia')} error={errors.dia} />
         <NumberField style={styles.flex} label="Max bolus" unit="U" value={f.max} onChangeText={set('max')} error={errors.max} />
@@ -177,6 +196,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
   flex: { flex: 1 },
   label: { marginTop: spacing.sm, marginBottom: spacing.sm },
+  caption: { marginTop: spacing.sm, marginBottom: spacing.lg },
   ratios: { gap: spacing.md },
   ratioRow: { marginTop: spacing.md, marginBottom: 0 },
   ratioError: { marginTop: spacing.sm },

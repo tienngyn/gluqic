@@ -80,6 +80,16 @@ Prototype only: choosing Dexcom in setup (with sample history) holds back the la
 - **Correction setpoint:** with 0 g carbs, taking a different amount than suggested offers “Use as correction setpoint”: `CF = (glucose − target) ÷ (units taken + IOB)`, e.g. 215 mg/dL, target 110, took 2 U instead of 3 U → 1 U : 53 mg/dL. It then applies to corrections and to the correction part of meal boluses, can be reset, ends when you edit the factor by hand, and the correction card tracks only corrections since it.
 - Logic: `src/domain/insulin/purpose.ts`, `src/domain/insights/corrections.ts`, `src/domain/bolus/setpoint.ts`, `bolusEvents.ts`, `similarMeals.ts` (with tests).
 
+## One-tap learning
+
+gluciq turns what it learns into concrete setting suggestions you accept with one tap (Bolus tab, for the meal you are calculating, and Insights → Suggestions). `src/domain/insights/suggestions.ts`:
+
+- **Carb ratio per meal:** ≥ 6 meals since the ratio last changed, ≥ 50 % ran high (above target at 2 h or corrected within the insulin duration), and no lows → 5 % more insulin (10 % if ≥ 75 % ran high). 2 lows within 4 h → 10 % less insulin, even with few meals.
+- **Correction factor:** ≥ 4 usable corrections and no lows → one 10 % step toward the observed effect, never past it; 2 lows after corrections → 10 % less.
+- Accepting makes it a setpoint (resettable), learning restarts from the change, and nothing new is suggested for 7 days after a change or “Not now”. Nothing is ever applied without a tap.
+
+Correction learning also uses corrections given while meal insulin is still active: the part of that insulin acting during the measurement comes from the action curve (your insulin, e.g. NovoRapid, peak ≈ 75 min) and is added to the units. Corrections with carbs still absorbing (3 h, 5 h after ≥ 30 g fat), food soon after, or exercise are left out.
+
 ## Architecture
 
 ```

@@ -81,6 +81,7 @@ export const mockInsulinProfile: InsulinProfile = {
   userId: USER_ID,
   targetGlucose: 110,
   correctionFactor: 35,
+  rapidInsulin: 'novorapid',
   insulinDurationHours: 4.5,
   insulinPeakMinutes: 75,
   maxBolus: 20,
@@ -207,6 +208,9 @@ export type SeedData = {
 const SIMULATED_CF = 50;
 const IOB_MODEL = { durationHours: 4.5, peakMinutes: 75 };
 
+/** Lunch has been running high for this many days. */
+const LUNCH_HIGH_DAYS = 14;
+
 /** The demo user set a breakfast setpoint this many days ago. */
 const SETPOINT_DAYS_AGO = 14;
 const BREAKFAST_RATIO_BEFORE = 5;
@@ -311,7 +315,12 @@ export function generateSeedData(now: Date = new Date()): SeedData {
     const breakfastAt = Math.round(between(rng, 450, 500));
     addMeal('breakfast', pick(rng, BREAKFASTS), breakfastAt, breakfastK, 70, breakfastRatio);
     if (rng() < 0.6) addCorrection(breakfastAt + Math.round(between(rng, 140, 170)), 205, 160);
-    addMeal('lunch', pick(rng, LUNCHES), Math.round(between(rng, 735, 795)), 0.55, 65);
+    // Lunch has run high for the last ~2 weeks (new office canteen), so the
+    // learning suggestions have something to offer. Sometimes corrected.
+    const lunchAt = Math.round(between(rng, 735, 795));
+    const lunchRunsHigh = d < LUNCH_HIGH_DAYS;
+    addMeal('lunch', pick(rng, LUNCHES), lunchAt, lunchRunsHigh ? 1.8 : 0.55, 65);
+    if (lunchRunsHigh && rng() < 0.4) addCorrection(lunchAt + Math.round(between(rng, 150, 180)), 205, 160);
     // Some afternoons run high without food (stress, a missed site change...)
     // and get a correction instead of a snack.
     if (!workoutDay && rng() < 0.3) {

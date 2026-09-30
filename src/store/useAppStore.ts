@@ -29,6 +29,7 @@ import type {
   WeightEntry,
   WeightGoal,
 } from '@/types/models';
+import type { SettingSuggestion } from '@/domain/insights/suggestions';
 import { uid } from '@/utils/format';
 
 export type BolusDraft = { carbs: number; mealType?: MealType; source: string } | null;
@@ -73,6 +74,8 @@ type State = {
    * Dexcom's ~3 h delay into Apple Health. Released by `releaseDelayedSensor`.
    */
   delayedGlucose: GlucoseReading[];
+  /** Suggestion key → when the user tapped "Not now". */
+  dismissedSuggestions: Record<string, string>;
 };
 
 /** How late Dexcom data reaches Apple Health. */
@@ -84,7 +87,14 @@ export type OnboardingResult = {
   glucoseSource: NonNullable<UserProfile['glucoseSource']>;
   insulin: Pick<
     InsulinProfile,
-    'targetGlucose' | 'correctionFactor' | 'insulinDurationHours' | 'maxBolus' | 'minGlucoseForBolus' | 'doseIncrement'
+    | 'targetGlucose'
+    | 'correctionFactor'
+    | 'insulinDurationHours'
+    | 'insulinPeakMinutes'
+    | 'rapidInsulin'
+    | 'maxBolus'
+    | 'minGlucoseForBolus'
+    | 'doseIncrement'
   > & { gramsPerUnit: Record<MealType, number> };
   goals: NutritionGoals;
   keepSampleData: boolean;
@@ -119,6 +129,9 @@ type Actions = {
   completeOnboarding: (r: OnboardingResult) => void;
   /** Skip setup and look around with the sample profile. */
   exploreSampleData: () => void;
+  /** The user accepted a learning suggestion: it becomes a resettable setpoint. */
+  acceptSuggestion: (s: SettingSuggestion) => void;
+  dismissSuggestion: (key: string) => void;
   /** Delivers delayed sensor readings that are old enough (or all of them). */
   releaseDelayedSensor: (now: Date, all?: boolean) => void;
 };
@@ -136,7 +149,14 @@ function seedState(): State {
   const seed = generateSeedData(new Date());
   return {
     user: seed.user,
-    insulinProfile: seed.insulinProfile,
+    // The sample breakfast ratio has been in place since the sample setpoint.
+    insulinProfile: {
+      ...seed.insulinProfile,
+      carbRatios: seed.insulinProfile.carbRatios.map((c) => {
+        const sp = seed.setpoints.find((x) => x.windowId === c.id && !x.endedAt);
+        return sp ? { ...c, changedAt: sp.createdAt } : c;
+      }),
+    },
     nutritionGoals: seed.nutritionGoals,
     weightGoal: seed.weightGoal,
     range: DEFAULT_RANGE,
@@ -156,6 +176,7 @@ function seedState(): State {
     lastSavedBolusId: null,
     onboarded: false,
     delayedGlucose: [],
+    dismissedSuggestions: {},
   };
 }
 
@@ -257,7 +278,7 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
       insulinProfile: {
         ...s.insulinProfile,
         carbRatios: s.insulinProfile.carbRatios.map((c) =>
-          c.id === input.windowId ? { ...c, gramsPerUnit: input.gramsPerUnit } : c,
+          c.id === input.windowId ? { ...c, gramsPerUnit: input.gramsPerUnit, changedAt: now } : c,
         ),
       },
     }));
@@ -274,7 +295,7 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
         insulinProfile: {
           ...s.insulinProfile,
           carbRatios: s.insulinProfile.carbRatios.map((c) =>
-            c.id === sp.windowId ? { ...c, gramsPerUnit: sp.previousGramsPerUnit } : c,
+            c.id === sp.windowId ? { ...c, gramsPerUnit: sp.previousGramsPerUnit, changedAt: now } : c,
           ),
         },
       };
@@ -296,7 +317,7 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
         ...s.correctionSetpoints.map((x) => (x.endedAt ? x : { ...x, endedAt: now, endReason: 'new-setpoint' as const })),
         setpoint,
       ],
-      insulinProfile: { ...s.insulinProfile, correctionFactor: input.factor },
+      insulinProfile: { ...s.insulinProfile, correctionFactor: input.factor, correctionFactorChangedAt: now },
     }));
     return setpoint;
   },
@@ -305,25 +326,31 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
     set((s) => {
       const sp = s.correctionSetpoints.find((x) => x.id === id);
       if (!sp || sp.endedAt) return {};
+      const now = new Date().toISOString();
       return {
         correctionSetpoints: s.correctionSetpoints.map((x) =>
-          x.id === id ? { ...x, endedAt: new Date().toISOString(), endReason: 'reset' as const } : x,
+          x.id === id ? { ...x, endedAt: now, endReason: 'reset' as const } : x,
         ),
-        insulinProfile: { ...s.insulinProfile, correctionFactor: sp.previousFactor },
+        insulinProfile: { ...s.insulinProfile, correctionFactor: sp.previousFactor, correctionFactorChangedAt: now },
       };
     }),
 
   updateInsulinProfile: (p) =>
-    set((s) => ({
-      // Editing the correction factor by hand ends a correction setpoint.
-      correctionSetpoints:
-        p.correctionFactor != null && p.correctionFactor !== s.insulinProfile.correctionFactor
-          ? s.correctionSetpoints.map((x) =>
-              x.endedAt ? x : { ...x, endedAt: new Date().toISOString(), endReason: 'manual-edit' as const },
-            )
+    set((s) => {
+      const now = new Date().toISOString();
+      const cfChanged = p.correctionFactor != null && p.correctionFactor !== s.insulinProfile.correctionFactor;
+      return {
+        // Editing the correction factor by hand ends a correction setpoint and restarts learning.
+        correctionSetpoints: cfChanged
+          ? s.correctionSetpoints.map((x) => (x.endedAt ? x : { ...x, endedAt: now, endReason: 'manual-edit' as const }))
           : s.correctionSetpoints,
-      insulinProfile: { ...s.insulinProfile, ...p },
-    })),
+        insulinProfile: {
+          ...s.insulinProfile,
+          ...p,
+          correctionFactorChangedAt: cfChanged ? now : s.insulinProfile.correctionFactorChangedAt,
+        },
+      };
+    }),
 
   updateCarbRatio: (id, patch) =>
     set((s) => ({
@@ -339,7 +366,16 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
           : s.setpoints,
       insulinProfile: {
         ...s.insulinProfile,
-        carbRatios: s.insulinProfile.carbRatios.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+        carbRatios: s.insulinProfile.carbRatios.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                ...patch,
+                changedAt:
+                  patch.gramsPerUnit != null && patch.gramsPerUnit !== c.gramsPerUnit ? new Date().toISOString() : c.changedAt,
+              }
+            : c,
+        ),
       },
     })),
 
@@ -356,11 +392,19 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
         ...s.insulinProfile,
         targetGlucose: r.insulin.targetGlucose,
         correctionFactor: r.insulin.correctionFactor,
+        // Learning restarts from any value that changed here.
+        correctionFactorChangedAt:
+          r.insulin.correctionFactor !== s.insulinProfile.correctionFactor ? now : s.insulinProfile.correctionFactorChangedAt,
         insulinDurationHours: r.insulin.insulinDurationHours,
+        insulinPeakMinutes: r.insulin.insulinPeakMinutes,
+        rapidInsulin: r.insulin.rapidInsulin,
         maxBolus: r.insulin.maxBolus,
         minGlucoseForBolus: r.insulin.minGlucoseForBolus,
         doseIncrement: r.insulin.doseIncrement,
-        carbRatios: s.insulinProfile.carbRatios.map((c) => ({ ...c, gramsPerUnit: r.insulin.gramsPerUnit[c.mealType] })),
+        carbRatios: s.insulinProfile.carbRatios.map((c) => {
+          const g = r.insulin.gramsPerUnit[c.mealType];
+          return { ...c, gramsPerUnit: g, changedAt: g !== c.gramsPerUnit ? now : c.changedAt };
+        }),
       };
       const user = { ...s.user, name: r.name, glucoseUnit: r.glucoseUnit, glucoseSource: r.glucoseSource, createdAt: now };
       const base = { user, insulinProfile, nutritionGoals: r.goals, onboarded: true, bolusDraft: null, pendingBolus: null };
@@ -393,6 +437,18 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
     }),
 
   exploreSampleData: () => set({ onboarded: true }),
+
+  acceptSuggestion: (s) => {
+    const { setRatioSetpoint, setCorrectionSetpoint } = get();
+    if (s.kind === 'ratio' && s.mealType && s.windowId) {
+      setRatioSetpoint({ mealType: s.mealType, windowId: s.windowId, gramsPerUnit: s.proposed, source: 'suggestion', basis: s.basis });
+    } else if (s.kind === 'correction') {
+      setCorrectionSetpoint({ factor: s.proposed, source: 'suggestion', basis: s.basis });
+    }
+  },
+
+  dismissSuggestion: (key) =>
+    set((s) => ({ dismissedSuggestions: { ...s.dismissedSuggestions, [key]: new Date().toISOString() } })),
 
   releaseDelayedSensor: (now, all = false) =>
     set((s) => {

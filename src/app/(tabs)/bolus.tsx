@@ -20,8 +20,17 @@ import { findSimilarMeals, summarizeOutcomes } from '@/domain/insights/similarMe
 import { BolusResultCard } from '@/features/bolus/BolusResultCard';
 import { DoseAdjuster } from '@/features/bolus/DoseAdjuster';
 import { SetpointCard } from '@/features/bolus/SetpointCard';
+import { SuggestionCard } from '@/features/insights/SuggestionCard';
 import { bolusFormSchema, mapEngineErrors, type BolusFormValues } from '@/features/bolus/form';
-import { useActiveCorrectionSetpoint, useActiveInsulin, useActiveSetpoint, useBolusEvents, useCurrentGlucose, useNow } from '@/hooks/useDerived';
+import {
+  useActiveCorrectionSetpoint,
+  useActiveInsulin,
+  useActiveSetpoint,
+  useBolusEvents,
+  useCurrentGlucose,
+  useNow,
+  useSuggestions,
+} from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import type { GlucoseTrend, MealType } from '@/types/models';
 import { formatDay, formatGlucose, formatTime, fromDisplayGlucose, MEAL_LABEL, MEAL_TYPES, relativeTime, toDisplayGlucose, TREND_META } from '@/utils/format';
@@ -86,6 +95,13 @@ export default function BolusScreen() {
   const resetSetpoint = useAppStore((s) => s.resetSetpoint);
   const correctionSetpoint = useActiveCorrectionSetpoint();
   const resetCorrectionSetpoint = useAppStore((s) => s.resetCorrectionSetpoint);
+  // Show the learned suggestion that applies to what is being calculated right now.
+  const suggestions = useSuggestions(now);
+  const correctionOnly = (values.carbs ?? '').trim() === '0';
+  const suggestion = correctionOnly
+    ? suggestions.find((s) => s.kind === 'correction')
+    : (suggestions.find((s) => s.kind === 'ratio' && s.mealType === mealType) ??
+      suggestions.find((s) => s.kind === 'correction'));
 
   const result = useMemo(() => {
     const glucose = parseNumber(values.glucose ?? '');
@@ -345,6 +361,12 @@ export default function BolusScreen() {
         )}
       </Section>
 
+      {suggestion ? (
+        <View style={styles.suggestion}>
+          <SuggestionCard key={suggestion.key} suggestion={suggestion} />
+        </View>
+      ) : null}
+
       <View style={[styles.row, styles.sectionTight]}>
         <Controller
           control={control}
@@ -486,6 +508,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   sectionTight: { marginTop: spacing.xl },
   ratio: { marginTop: spacing.md },
+  suggestion: { marginTop: spacing.lg },
   setpoint: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -151,7 +151,11 @@ export type CarbRatioWindow = {
   endMinute: number;
   /** grams of carbohydrate covered by 1 U */
   gramsPerUnit: number;
+  /** When the ratio last changed; learning only uses meals since then. */
+  changedAt?: string;
 };
+
+export type RapidInsulin = 'novorapid' | 'humalog' | 'apidra' | 'fiasp' | 'lyumjev' | 'other';
 
 export type InsulinProfile = {
   id: string;
@@ -160,6 +164,10 @@ export type InsulinProfile = {
   targetGlucose: number;
   /** mg/dL drop per 1 U */
   correctionFactor: number;
+  /** When the correction factor last changed; learning only uses corrections since then. */
+  correctionFactorChangedAt?: string;
+  /** The rapid-acting insulin used; sets the default action curve. */
+  rapidInsulin?: RapidInsulin;
   insulinDurationHours: number;
   /** Peak activity of the rapid insulin, minutes. Used by the IOB model. */
   insulinPeakMinutes: number;
@@ -186,8 +194,10 @@ export type RatioSetpoint = {
   /** the ratio before this setpoint, restored on reset */
   previousGramsPerUnit: number;
   createdAt: string;
-  /** How the ratio was derived, kept for audit. */
-  origin: {
+  /** Where it came from: a dose the user changed, or an accepted learning suggestion. */
+  source?: 'dose' | 'suggestion';
+  /** How the ratio was derived from a dose, kept for audit. */
+  origin?: {
     calculationId?: string;
     unitsTaken: number;
     suggestedBolus: number;
@@ -195,6 +205,8 @@ export type RatioSetpoint = {
     correctionBolus: number;
     activeInsulin: number;
   };
+  /** For accepted suggestions: the evidence shown to the user. */
+  basis?: string;
   endedAt?: string;
   endReason?: 'reset' | 'new-setpoint' | 'manual-edit';
 };
@@ -210,7 +222,8 @@ export type CorrectionSetpoint = {
   factor: number;
   previousFactor: number;
   createdAt: string;
-  origin: {
+  source?: 'dose' | 'suggestion';
+  origin?: {
     calculationId?: string;
     unitsTaken: number;
     suggestedBolus: number;
@@ -218,6 +231,7 @@ export type CorrectionSetpoint = {
     targetGlucose: number;
     activeInsulin: number;
   };
+  basis?: string;
   endedAt?: string;
   endReason?: 'reset' | 'new-setpoint' | 'manual-edit';
 };

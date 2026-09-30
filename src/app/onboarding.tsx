@@ -12,8 +12,9 @@ import { ListRow } from '@/components/ui/ListRow';
 import { Screen, Section } from '@/components/ui/Screen';
 import { ChipGroup, SegmentedControl } from '@/components/ui/SegmentedControl';
 import { colors, radius, spacing } from '@/constants/theme';
+import { RAPID_INSULIN_OPTIONS, RAPID_INSULINS } from '@/domain/insulin/products';
 import { useAppStore, type OnboardingResult } from '@/store/useAppStore';
-import type { GlucoseSource, GlucoseUnit, MealType } from '@/types/models';
+import type { GlucoseSource, GlucoseUnit, MealType, RapidInsulin } from '@/types/models';
 import { formatGlucose, fromDisplayGlucose, MEAL_LABEL, MEAL_TYPES, toDisplayGlucose } from '@/utils/format';
 import { haptics } from '@/utils/haptics';
 
@@ -43,6 +44,7 @@ type Form = {
   target: string;
   cf: string;
   dia: string;
+  insulin: RapidInsulin;
   ratios: Record<MealType, string>;
   max: string;
   minG: string;
@@ -71,6 +73,7 @@ export default function Onboarding() {
     target: String(toDisplayGlucose(current.insulinProfile.targetGlucose, u)),
     cf: String(toDisplayGlucose(current.insulinProfile.correctionFactor, u)),
     dia: String(current.insulinProfile.insulinDurationHours),
+    insulin: current.insulinProfile.rapidInsulin ?? 'novorapid',
     ratios: { breakfast: ratioFor('breakfast'), lunch: ratioFor('lunch'), dinner: ratioFor('dinner'), snack: ratioFor('snack') },
     max: String(current.insulinProfile.maxBolus),
     minG: String(toDisplayGlucose(current.insulinProfile.minGlucoseForBolus, u)),
@@ -87,7 +90,8 @@ export default function Onboarding() {
     source: 'dexcom',
     target: '110',
     cf: '40',
-    dia: '4',
+    dia: '5',
+    insulin: 'novorapid',
     ratios: { breakfast: '', lunch: '', dinner: '', snack: '' },
     max: '15',
     minG: '70',
@@ -146,6 +150,8 @@ export default function Onboarding() {
         targetGlucose: mg(f.target),
         correctionFactor: mg(f.cf),
         insulinDurationHours: num(f.dia),
+        rapidInsulin: f.insulin,
+        insulinPeakMinutes: RAPID_INSULINS[f.insulin].peakMinutes,
         maxBolus: num(f.max),
         minGlucoseForBolus: mg(f.minG),
         doseIncrement: Number(f.increment),
@@ -252,6 +258,18 @@ export default function Onboarding() {
         {step === 2 ? (
           <View>
             <StepTitle title="Insulin settings" body="Use the values agreed with your care team. You can change them any time." />
+            <Text variant="label" color="secondary" style={styles.sub}>
+              Your rapid-acting insulin
+            </Text>
+            <ChipGroup<RapidInsulin>
+              value={f.insulin}
+              onChange={(insulin) => setF((s) => ({ ...s, insulin }))}
+              options={RAPID_INSULIN_OPTIONS}
+            />
+            <Text variant="caption" color="muted" style={styles.sub}>
+              {RAPID_INSULINS[f.insulin].label} ({RAPID_INSULINS[f.insulin].generic}) is modelled with peak action after about{' '}
+              {RAPID_INSULINS[f.insulin].peakMinutes} min. This decides how much insulin still counts as active.
+            </Text>
             <View style={styles.row}>
               <NumberField
                 style={styles.flex}
@@ -263,7 +281,15 @@ export default function Onboarding() {
                 error={errors.cf}
                 hint="How far 1 U lowers glucose"
               />
-              <NumberField style={styles.flex} label="Insulin duration" unit="h" value={f.dia} onChangeText={set('dia')} error={errors.dia} />
+              <NumberField
+                style={styles.flex}
+                label="Insulin duration"
+                unit="h"
+                value={f.dia}
+                onChangeText={set('dia')}
+                error={errors.dia}
+                hint="Often 4–5 h for this curve"
+              />
             </View>
             <Section title="Carb ratios" style={styles.section}>
               <Text variant="label" color="muted" style={styles.sub}>
@@ -360,6 +386,7 @@ export default function Onboarding() {
             <Card padding={0}>
               <View style={styles.inset}>
                 <ListRow label="Target" value={`${f.target} ${f.unit}`} />
+                <ListRow label="Insulin" value={`${RAPID_INSULINS[f.insulin].label} · ${f.dia} h`} />
                 <ListRow label="Correction factor" value={`1 U : ${f.cf}`} />
                 <ListRow
                   label="Carb ratios"

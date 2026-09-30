@@ -101,18 +101,48 @@ describe('analyzeCorrections', () => {
     expect(a.totalUnits).toBe(8);
   });
 
-  it('skips corrections with a meal or other insulin nearby', () => {
+  it('skips corrections with food soon after, and marks clean ones', () => {
     const meals = [meal(day(1, 16))];
-    const a = analyzeCorrections([...doses, dose(day(2, 16), 1, 'correction')], meals, readings);
-    expect(a.samples.map((s) => s.timestamp)).toEqual([iso(day(3, 15)), iso(day(4, 15))]);
+    const a = analyzeCorrections(doses, meals, readings);
+    expect(a.samples.map((s) => s.timestamp)).toEqual([iso(day(2, 15)), iso(day(3, 15)), iso(day(4, 15))]);
+    expect(a.samples.every((s) => s.kind === 'clean')).toBe(true);
     expect(a.observedFactor).toBeNull();
+  });
+
+  it('skips corrections while carbs are absorbing (longer after high-fat meals) or around exercise', () => {
+    const t = day(10, 15, 30);
+    const d = [dose(t, 2, 'correction')];
+    const r = series(day(10, 15), 300, () => 180);
+    const normalMeal = meal(day(10, 13));
+    const pizza = { ...meal(day(10, 11)), fat: 40 };
+    const run = { id: 'a', userId: 'u', kind: 'run' as const, durationMin: 40, intensity: 'hard' as const, timestamp: iso(day(10, 16)), source: 'manual' as const };
+    expect(analyzeCorrections(d, [normalMeal], r).samples).toHaveLength(0);
+    expect(analyzeCorrections(d, [pizza], r).samples).toHaveLength(0);
+    expect(analyzeCorrections(d, [], r, 70, { activities: [run] }).samples).toHaveLength(0);
+    expect(analyzeCorrections(d, [], r).samples).toHaveLength(1);
+  });
+
+  it('adds meal insulin still acting instead of crediting the correction with it', () => {
+    // Lunch 8.5 U at 12:30, correction 2.5 U at 15:30 (3 h later) at 253 → lowest 128 after 2 h.
+    const lunch = { ...meal(day(11, 12, 30)), fat: 15 };
+    const d = [dose(day(11, 12, 25), 8.5, 'meal'), dose(day(11, 15, 30), 2.5, 'correction')];
+    const r = series(day(11, 15, 30), 240, (m) => (m <= 120 ? 253 - (125 * m) / 120 : 128 + (m - 120) * 0.1));
+    const a = analyzeCorrections(d, [lunch], r, 70, { model: { durationHours: 4, peakMinutes: 75 } });
+    expect(a.samples).toHaveLength(1);
+    const [s] = a.samples;
+    expect(s.kind).toBe('adjusted');
+    expect(s.otherInsulinUnits).toBeGreaterThan(0.4);
+    expect(s.otherInsulinUnits).toBeLessThan(0.8);
+    // Naive 125 ÷ 2.5 = 50 would overstate how strong corrections are.
+    expect(s.dropPerUnit).toBe(Math.round(125 / (2.5 + s.otherInsulinUnits)));
+    expect(s.dropPerUnit).toBeLessThan(45);
   });
 
   it('suggests a review when corrections work differently from the setting — never a dose', () => {
     const i = correctionInsight(analyzeCorrections(doses, [], readings), 35, day(5, 9));
     expect(i?.tone).toBe('attention');
     expect(i?.body).toBe(
-      'Across 4 corrections without food or other insulin nearby, each unit lowered glucose by about 45 mg/dL (your setting: 35).',
+      'Across 4 corrections without food nearby, each unit lowered glucose by about 45 mg/dL (your setting: 35).',
     );
     expect(i?.suggestion).toMatch(/correction factor may be worth reviewing/);
     expect(containsDoseInstruction(`${i?.body} ${i?.suggestion}`)).toBe(false);
@@ -137,7 +167,7 @@ describe('correction setpoint insight', () => {
 
   it('says it is collecting until enough corrections since the setpoint', () => {
     const i = correctionInsight(analyzeCorrections(doses.slice(0, 1), [], readings), 45, day(5, 9), sp);
-    expect(i?.body).toMatch(/^Set on 1 Sep \(was 35 mg\/dL per unit\)\. 1 of 4 clean corrections tracked/);
+    expect(i?.body).toMatch(/^Set on 1 Sep \(was 35 mg\/dL per unit\)\. 1 of 4 usable corrections tracked/);
   });
 
   it('compares corrections since the setpoint with it', () => {

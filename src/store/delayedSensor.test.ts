@@ -10,6 +10,8 @@ const setup = (glucoseSource: OnboardingResult['glucoseSource']): OnboardingResu
     targetGlucose: 110,
     correctionFactor: 40,
     insulinDurationHours: 4,
+    insulinPeakMinutes: 75,
+    rapidInsulin: 'novorapid',
     maxBolus: 15,
     minGlucoseForBolus: 70,
     doseIncrement: 0.5,
