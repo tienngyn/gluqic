@@ -13,6 +13,7 @@ import { SheetHeader } from '@/components/ui/SheetHeader';
 import { colors, spacing } from '@/constants/theme';
 import { resolveCarbRatio } from '@/domain/bolus/carbRatio';
 import { proposeSetpoint } from '@/domain/bolus/setpoint';
+import { SetpointCard } from '@/features/bolus/SetpointCard';
 import { useAppStore } from '@/store/useAppStore';
 import { formatGlucose, MEAL_LABEL } from '@/utils/format';
 import { haptics } from '@/utils/haptics';
@@ -24,9 +25,9 @@ export default function ConfirmBolus() {
   const saveBolus = useAppStore((s) => s.saveBolus);
   const setRatioSetpoint = useAppStore((s) => s.setRatioSetpoint);
   const carbRatios = useAppStore((s) => s.insulinProfile.carbRatios);
-  const [units, setUnits] = useState(pending ? pending.suggestedBolus.toFixed(1) : '');
+  const [units, setUnits] = useState(pending ? (pending.plannedUnits ?? pending.suggestedBolus).toFixed(1) : '');
   const [ack, setAck] = useState(false);
-  const [makeSetpoint, setMakeSetpoint] = useState(false);
+  const [makeSetpoint, setMakeSetpoint] = useState(pending?.plannedSetpoint ?? false);
 
   if (!pending) {
     return (
@@ -101,49 +102,16 @@ export default function ConfirmBolus() {
         ))}
       </View>
 
-      {proposal ? (
-        <Card variant="elevated" padding={spacing.lg + 2} style={styles.card}>
-          <View style={styles.spHead}>
-            <View style={styles.ackText}>
-              <Text variant="bodyStrong">Use as {mealLabel} setpoint</Text>
-              <Text variant="label" color="secondary">
-                {proposal.ok
-                  ? `Next ${mealLabel}s are calculated with 1 U : ${proposal.gramsPerUnit} g instead of 1 U : ${window?.gramsPerUnit} g. gluciq tracks how they go from here.`
-                  : proposal.reason}
-              </Text>
-            </View>
-            {proposal.ok ? (
-              <Switch
-                value={makeSetpoint}
-                onValueChange={(v) => {
-                  haptics.selection();
-                  setMakeSetpoint(v);
-                }}
-                trackColor={{ false: colors.elevatedHigh, true: colors.green }}
-                thumbColor="#fff"
-                accessibilityLabel={`Use as ${mealLabel} setpoint`}
-              />
-            ) : null}
-          </View>
-          {proposal.ok && makeSetpoint ? (
-            <View style={styles.spSteps}>
-              {proposal.steps.map((st) => (
-                <View key={st.label} style={styles.spStep}>
-                  <View style={styles.ackText}>
-                    <Text variant="callout">{st.label}</Text>
-                    <Text variant="caption" color="muted">
-                      {st.formula}
-                    </Text>
-                  </View>
-                  <Text variant="bodyStrong" tabular>
-                    {st.value}
-                  </Text>
-                </View>
-              ))}
-              {proposal.caution ? <Banner tone="caution" message={proposal.caution} /> : null}
-            </View>
-          ) : null}
-        </Card>
+      {proposal && window ? (
+        <View style={styles.card}>
+          <SetpointCard
+            proposal={proposal}
+            currentGramsPerUnit={window.gramsPerUnit}
+            mealLabel={mealLabel}
+            value={makeSetpoint}
+            onChange={setMakeSetpoint}
+          />
+        </View>
       ) : null}
 
       <Card padding={spacing.lg} style={styles.card}>
@@ -181,13 +149,4 @@ const styles = StyleSheet.create({
   card: { marginTop: spacing.xl },
   ack: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.xxl, marginBottom: spacing.md },
   ackText: { flex: 1, gap: 2 },
-  spHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  spSteps: {
-    marginTop: spacing.lg,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    gap: spacing.sm,
-  },
-  spStep: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
 });

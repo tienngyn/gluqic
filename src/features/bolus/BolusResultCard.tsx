@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
@@ -20,6 +21,8 @@ export function BolusResultCard({
   unit,
   similar,
   setpointSince,
+  adjuster,
+  afterCard,
 }: {
   result: Ok | null;
   mealType: MealType;
@@ -27,6 +30,10 @@ export function BolusResultCard({
   similar?: OutcomeSummary;
   /** Date label when the ratio comes from a user setpoint. */
   setpointSince?: string;
+  /** Rendered under the suggested number, e.g. the "You'll take" stepper. */
+  adjuster?: ReactNode;
+  /** Rendered between the card and the explanation, e.g. the setpoint offer. */
+  afterCard?: ReactNode;
 }) {
   if (!result) {
     return (
@@ -63,6 +70,8 @@ export function BolusResultCard({
             U
           </Text>
         </View>
+
+        {adjuster}
 
         <View style={styles.breakdown}>
           {result.steps.map((s) => (
@@ -106,6 +115,8 @@ export function BolusResultCard({
           </View>
         ) : null}
       </Card>
+
+      {afterCard ? <View style={styles.afterCard}>{afterCard}</View> : null}
 
       <View style={styles.why}>
         <Text variant="headline">Why this amount?</Text>
@@ -151,6 +162,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   warnings: { gap: spacing.sm, marginTop: spacing.lg },
+  afterCard: { marginTop: spacing.md },
   why: { marginTop: spacing.xxl, gap: spacing.sm },
   whyBody: { lineHeight: 22 },
   version: { marginTop: spacing.xs },

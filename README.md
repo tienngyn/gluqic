@@ -45,7 +45,7 @@ Also: unified timeline (`/timeline`), weight tracker with 7D/30D/3M/1Y/All, BMI,
 
 ## Setpoints
 
-When you take a different amount than suggested, the confirm screen offers **“Use as … setpoint”**. gluciq turns the dose into a carb ratio for that meal type:
+Under the suggested amount on the Bolus screen, **“You’ll take”** lets you change the dose (− / + in dose steps, or type it). As soon as it differs from the suggestion, a **“Use as … setpoint”** switch appears (it is also on the confirm screen). gluciq turns the dose into a carb ratio for that meal type:
 
 ```
 mealUnits = unitsTaken − correction + activeInsulin      e.g. 16 − 0.4 + 0 = 15.6 U

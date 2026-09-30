@@ -33,7 +33,14 @@ import { uid } from '@/utils/format';
 export type BolusDraft = { carbs: number; mealType?: MealType; source: string } | null;
 
 /** A calculation awaiting explicit user confirmation before it is saved. */
-export type PendingBolus = Omit<BolusCalculation, 'id' | 'confirmedUnits'> | null;
+export type PendingBolus =
+  | (Omit<BolusCalculation, 'id' | 'confirmedUnits'> & {
+      /** Amount the user entered on the Bolus screen, if different from the suggestion. */
+      plannedUnits?: number;
+      /** Whether the user already chose to make it a setpoint. */
+      plannedSetpoint?: boolean;
+    })
+  | null;
 
 type State = {
   user: UserProfile;

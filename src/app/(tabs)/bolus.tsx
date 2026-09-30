@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router, useFocusEffect } from 'expo-router';
 import { History } from 'lucide-react-native';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { StyleSheet, View } from 'react-native';
 
@@ -15,8 +15,11 @@ import { IconButton } from '@/components/ui/SheetHeader';
 import { colors, spacing } from '@/constants/theme';
 import { resolveCarbRatio, suggestMealType } from '@/domain/bolus/carbRatio';
 import { calculateBolus, type PlannedActivity } from '@/domain/bolus/engine';
+import { proposeSetpoint } from '@/domain/bolus/setpoint';
 import { findSimilarMeals, summarizeOutcomes } from '@/domain/insights/similarMeals';
 import { BolusResultCard } from '@/features/bolus/BolusResultCard';
+import { DoseAdjuster } from '@/features/bolus/DoseAdjuster';
+import { SetpointCard } from '@/features/bolus/SetpointCard';
 import { bolusFormSchema, mapEngineErrors, type BolusFormValues } from '@/features/bolus/form';
 import { useActiveInsulin, useActiveSetpoint, useBolusEvents, useCurrentGlucose, useNow } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
@@ -64,9 +67,14 @@ export default function BolusScreen() {
     mode: 'onChange',
   });
 
+  const [override, setOverride] = useState<{ base: number; value: string } | null>(null);
+  const [makeSetpoint, setMakeSetpoint] = useState(false);
+
   useFocusEffect(
     useCallback(() => {
       reset(defaults);
+      setOverride(null);
+      setMakeSetpoint(false);
     }, [defaults, reset]),
   );
 
@@ -125,8 +133,27 @@ export default function BolusScreen() {
     return formState.errors[name]?.message ?? engineErrors[name];
   };
 
+  // What the user will actually take. Keyed to the suggestion it was based
+  // on, so a new calculation starts from the new suggestion again.
+  const suggested = result.ok ? result.breakdown.suggestedBolus : null;
+  const activeOverride = override && suggested != null && override.base === suggested ? override : null;
+  const takeText = activeOverride ? activeOverride.value : suggested != null ? suggested.toFixed(1) : '';
+  const take = parseNumber(takeText);
+  const takeDiffers = suggested != null && take != null && Math.abs(take - suggested) >= 0.05;
+  const takeOverMax = take != null && take > profile.maxBolus;
+  const proposal =
+    result.ok && takeDiffers && take != null && ratio
+      ? proposeSetpoint({
+          unitsTaken: take,
+          carbs: result.input.carbsGrams,
+          correctionBolus: result.breakdown.correctionBolus,
+          activeInsulin: result.input.activeInsulin,
+          currentGramsPerUnit: ratio.gramsPerUnit,
+        })
+      : null;
+
   const onReview = handleSubmit(() => {
-    if (!result.ok || !ratio) return;
+    if (!result.ok || !ratio || take == null || takeOverMax) return;
     haptics.light();
     setPendingBolus({
       currentGlucose: result.input.currentGlucose,
@@ -143,6 +170,8 @@ export default function BolusScreen() {
       warnings: result.warnings.map((w) => w.message),
       calculationVersion: result.version,
       timestamp: new Date().toISOString(),
+      plannedUnits: takeDiffers ? take : undefined,
+      plannedSetpoint: takeDiffers && makeSetpoint && !!proposal?.ok,
     });
     router.push('/bolus/confirm');
   });
@@ -309,13 +338,36 @@ export default function BolusScreen() {
           unit={unit}
           similar={similar}
           setpointSince={setpoint ? formatDay(setpoint.createdAt, now) : undefined}
+          adjuster={
+            result.ok && !result.blocked && suggested != null ? (
+              <DoseAdjuster
+                value={takeText}
+                suggested={suggested}
+                step={profile.doseIncrement}
+                onChange={(value) => setOverride({ base: suggested, value })}
+              />
+            ) : null
+          }
+          afterCard={
+            takeOverMax ? (
+              <Banner tone="critical" message={`Above your max bolus of ${profile.maxBolus} U.`} />
+            ) : proposal && ratio ? (
+              <SetpointCard
+                proposal={proposal}
+                currentGramsPerUnit={ratio.gramsPerUnit}
+                mealLabel={MEAL_LABEL[mealType].toLowerCase()}
+                value={makeSetpoint}
+                onChange={setMakeSetpoint}
+              />
+            ) : null
+          }
         />
       </View>
 
       <Button
-        label="Review & save"
+        label={takeDiffers && take != null ? `Review ${take.toFixed(1)} U${makeSetpoint && proposal?.ok ? ' + setpoint' : ''}` : 'Review & save'}
         onPress={onReview}
-        disabled={!result.ok || !ratio}
+        disabled={!result.ok || !ratio || take == null || takeOverMax}
         style={styles.cta}
       />
       <Text variant="caption" color="muted" align="center" style={styles.footnote}>
