@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "gluciq",
+    "slug": "gluciq",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "gluciq",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#050505",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.gluciq.prototype",
+      "infoPlist": {
+        "NSCameraUsageDescription": "gluciq uses the camera to scan food barcodes.",
+        "NSHealthShareUsageDescription": "gluciq reads weight, workouts, steps, active energy, glucose, carbohydrates and insulin so it can show how they interact.",
+        "NSHealthUpdateUsageDescription": "gluciq writes the glucose, carbohydrate, insulin and weight entries you log."
+      }
+    },
+    "android": {
+      "package": "app.gluciq.prototype",
+      "adaptiveIcon": {
+        "backgroundColor": "#050505",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#050505",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "gluciq uses the camera to scan food barcodes.",
+          "recordAudioAndroid": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
