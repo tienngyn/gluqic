@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import {
   Activity,
   Database,
+  HardDrive,
   HeartPulse,
   Pen,
   Radio,
@@ -11,7 +12,9 @@ import {
   SlidersHorizontal,
   Sparkles,
   Target,
+  Trash2,
 } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/cards/Card';
@@ -41,7 +44,24 @@ export default function ProfileScreen() {
   const releaseDelayedSensor = useAppStore((s) => s.releaseDelayedSensor);
   const setpoints = useAppStore((s) => s.setpoints);
   const correctionSetpoints = useAppStore((s) => s.correctionSetpoints);
+  const eraseAllData = useAppStore((s) => s.eraseAllData);
+  const disconnectShare = useDexcomShare((s) => s.disconnect);
   const unit = user.glucoseUnit;
+
+  // Two taps: the first arms, the second deletes. Disarms itself after a few seconds.
+  const [confirmErase, setConfirmErase] = useState(false);
+  useEffect(() => {
+    if (!confirmErase) return;
+    const t = setTimeout(() => setConfirmErase(false), 4000);
+    return () => clearTimeout(t);
+  }, [confirmErase]);
+  const onErase = async () => {
+    if (!confirmErase) return setConfirmErase(true);
+    setConfirmErase(false);
+    await disconnectShare();
+    await eraseAllData();
+    router.replace('/onboarding');
+  };
 
   return (
     <Screen tabBar>
@@ -160,6 +180,27 @@ export default function ProfileScreen() {
               />
             ) : null}
             <ListRow icon={icon(RotateCcw)} label="Reset demo data" detail="Regenerates 90 days of sample history" onPress={resetDemoData} chevron={false} last />
+          </View>
+        </Card>
+      </Section>
+
+      <Section title="Your data">
+        <Card padding={0}>
+          <View style={styles.inset}>
+            <ListRow
+              icon={icon(HardDrive)}
+              label="Saved on this device"
+              detail="Readings, doses, meals, settings and setpoints stay after closing the app"
+              chevron={false}
+            />
+            <ListRow
+              icon={<Trash2 size={18} color={confirmErase ? colors.red : colors.textSecondary} strokeWidth={1.6} />}
+              label={confirmErase ? 'Tap again to delete everything' : 'Delete all data'}
+              detail={confirmErase ? 'This cannot be undone' : 'Removes all saved data and disconnects Dexcom Share'}
+              onPress={onErase}
+              chevron={false}
+              last
+            />
           </View>
         </Card>
         <Text variant="caption" color="muted" style={styles.disclaimer}>

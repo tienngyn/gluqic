@@ -100,6 +100,10 @@ gluciq turns what it learns into concrete setting suggestions you accept with on
 
 Correction learning also uses corrections given while meal insulin is still active: the part of that insulin acting during the measurement comes from the action curve (your insulin, e.g. NovoRapid, peak ≈ 75 min) and is added to the units. Corrections with carbs still absorbing (3 h, 5 h after ≥ 30 g fat), food soon after, or exercise are left out.
 
+## Saved data
+
+Everything you log and set (readings, doses, meals, weight, settings, setpoints, learning state) is saved on the device: SQLite (`expo-sqlite/kv-store`) on iOS, `localStorage` in the browser. Saves are batched (≈ 1 s after the last change) and written immediately when the app goes to the background. Unfinished calculations are never saved. The app waits until saved data is loaded before showing anything, so nothing can overwrite it on start. The saved format is versioned (`STORAGE_VERSION`) for future migrations. Profile → Your data → Delete all data removes everything and disconnects Dexcom Share (two taps).
+
 ## Architecture
 
 ```
@@ -108,7 +112,7 @@ src/
   components/          cards/, charts/ (SVG line, bar, ring), forms/, navigation/ (floating glass tab bar), typography/, ui/
   domain/              pure, tested logic: bolus/, glucose/, insulin/, nutrition/, insights/
   features/            screen-level pieces (bolus form + result card, glucose hero, logging)
-  services/            foodDatabase/ (provider interface, mock + Open Food Facts), healthkit/ (interface + stub),
+  services/            persistence/ (debounced local saving), dexcomShare/, foodDatabase/ (provider interface, mock + Open Food Facts), healthkit/ (interface + stub),
                        supabase/ (sync interface + schema.sql)
   store/               Zustand store (local-first source of truth)
   hooks/               memoised derived views over the store
@@ -118,7 +122,7 @@ src/
 
 ## Next steps
 
-1. Persistence: SQLite adapter behind the store; then Supabase sync using `services/supabase/schema.sql`.
+1. Sync and backup: Supabase using `services/supabase/schema.sql` (local saving is done).
 2. HealthKit: implement `HealthService` in a development build (e.g. `@kingstinct/react-native-healthkit`).
 3. Switch `foodDatabase` to Open Food Facts (already implemented) merged with custom foods.
 4. CGM integrations, photo recognition, reports — the domain and service boundaries are set up for these.

@@ -1,22 +1,23 @@
 import { Redirect } from 'expo-router';
 import { TabList, Tabs, TabSlot, TabTrigger } from 'expo-router/ui';
 import { useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { BolusTabButton, FloatingTabBar, TAB_ICONS, TabButton } from '@/components/navigation/TabBar';
 import { colors } from '@/constants/theme';
 import { useNow } from '@/hooks/useDerived';
-import { useAppStore } from '@/store/useAppStore';
+import { useAppStore, useHydrated } from '@/store/useAppStore';
 import { SHARE_POLL_MIN, useDexcomShare } from '@/store/useDexcomShare';
 
 export default function TabLayout() {
+  const hydrated = useHydrated();
   const onboarded = useAppStore((s) => s.onboarded);
   const releaseDelayedSensor = useAppStore((s) => s.releaseDelayedSensor);
   const now = useNow();
   // Prototype: delayed sensor readings "arrive" once they are old enough.
   useEffect(() => {
-    releaseDelayedSensor(now);
-  }, [now, releaseDelayedSensor]);
+    if (hydrated) releaseDelayedSensor(now);
+  }, [hydrated, now, releaseDelayedSensor]);
 
   // Dexcom Share: reconnect with saved credentials, then poll every 5 minutes.
   const restoreShare = useDexcomShare((s) => s.restore);
@@ -24,13 +25,15 @@ export default function TabLayout() {
   const shareStatus = useDexcomShare((s) => s.status);
   const lastShareSync = useDexcomShare((s) => s.lastSyncAt);
   useEffect(() => {
-    void restoreShare();
-  }, [restoreShare]);
+    if (hydrated) void restoreShare();
+  }, [hydrated, restoreShare]);
   useEffect(() => {
-    if (shareStatus !== 'connected' && shareStatus !== 'demo') return;
+    if (!hydrated || (shareStatus !== 'connected' && shareStatus !== 'demo')) return;
     if (!lastShareSync || now.getTime() - new Date(lastShareSync).getTime() >= SHARE_POLL_MIN * 60000) void syncShare(now);
-  }, [now, shareStatus, lastShareSync, syncShare]);
+  }, [hydrated, now, shareStatus, lastShareSync, syncShare]);
 
+  // Saved data is still loading: show the plain background, not setup or sample data.
+  if (!hydrated) return <View style={styles.root} />;
   if (!onboarded) return <Redirect href="/onboarding" />;
   return (
     <Tabs style={styles.root}>
