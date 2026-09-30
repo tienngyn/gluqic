@@ -122,3 +122,27 @@ describe('analyzeCorrections', () => {
     expect(correctionInsight(analyzeCorrections(doses, [], readings), 44, day(5, 9))?.tone).toBe('positive');
   });
 });
+
+describe('correction setpoint insight', () => {
+  const sp = {
+    id: 'cs',
+    factor: 45,
+    previousFactor: 35,
+    createdAt: iso(day(1, 0)),
+    origin: { unitsTaken: 2, suggestedBolus: 3, currentGlucose: 200, targetGlucose: 110, activeInsulin: 0 },
+  };
+  const days = [1, 2, 3, 4];
+  const doses = days.map((d) => dose(day(d, 15), 2, 'correction'));
+  const readings = days.flatMap((d) => series(day(d, 14, 30), 300, (t) => (t <= 30 ? 200 : Math.max(110, 200 - (t - 30) * 0.6))));
+
+  it('says it is collecting until enough corrections since the setpoint', () => {
+    const i = correctionInsight(analyzeCorrections(doses.slice(0, 1), [], readings), 45, day(5, 9), sp);
+    expect(i?.body).toMatch(/^Set on 1 Sep \(was 35 mg\/dL per unit\)\. 1 of 4 clean corrections tracked/);
+  });
+
+  it('compares corrections since the setpoint with it', () => {
+    const i = correctionInsight(analyzeCorrections(doses, [], readings), 45, day(5, 9), sp);
+    expect(i?.tone).toBe('positive');
+    expect(i?.body).toMatch(/^Since your setpoint on 1 Sep, across 4 corrections .* about 45 mg\/dL \(your setpoint: 45\)\. That matches your setpoint well\.$/);
+  });
+});

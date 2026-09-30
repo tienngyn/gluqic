@@ -6,7 +6,7 @@
  */
 import { createReadingIndex } from '@/domain/glucose/stats';
 import { classifyDose } from '@/domain/insulin/purpose';
-import type { GlucoseReading, Insight, InsulinDose, Meal } from '@/types/models';
+import type { CorrectionSetpoint, GlucoseReading, Insight, InsulinDose, Meal } from '@/types/models';
 
 const MIN = 60000;
 
@@ -96,29 +96,58 @@ export function analyzeCorrections(
   };
 }
 
-/** Insight comparing observed correction effect with the setting. Wording avoids dose instructions. */
-export function correctionInsight(a: CorrectionAnalysis, settingFactor: number, now = new Date()): Insight | null {
-  const base = { id: 'corrections', type: 'correction' as const, title: 'Corrections', createdAt: now.toISOString() };
-  if (a.total === 0) return null;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const day = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+};
+
+/**
+ * Insight comparing observed correction effect with the setting. With an
+ * active correction setpoint, pass only corrections since it. Wording
+ * avoids dose instructions.
+ */
+export function correctionInsight(
+  a: CorrectionAnalysis,
+  settingFactor: number,
+  now = new Date(),
+  setpoint?: CorrectionSetpoint,
+): Insight | null {
+  const base = {
+    id: 'corrections',
+    type: 'correction' as const,
+    title: setpoint ? 'Correction setpoint' : 'Corrections',
+    createdAt: now.toISOString(),
+  };
+  const since = setpoint ? `Since your setpoint on ${day(setpoint.createdAt)}, ` : '';
+  if (a.total === 0 && !setpoint) return null;
   if (a.observedFactor == null) {
     return {
       ...base,
-      body: `${a.total} corrections logged. ${a.samples.length} of ${CORRECTION_RULES.minSamples} clean ones (no meal or other insulin nearby) needed before gluciq can compare them with your correction factor.`,
+      body: setpoint
+        ? `Set on ${day(setpoint.createdAt)} (was ${setpoint.previousFactor} mg/dL per unit). ${a.samples.length} of ${CORRECTION_RULES.minSamples} clean corrections tracked so far — results appear after ${CORRECTION_RULES.minSamples}.`
+        : `${a.total} corrections logged. ${a.samples.length} of ${CORRECTION_RULES.minSamples} clean ones (no meal or other insulin nearby) needed before gluciq can compare them with your correction factor.`,
       tone: 'neutral',
       confidence: 0.2,
     };
   }
   const diff = (a.observedFactor - settingFactor) / settingFactor;
   const lowsText = a.lowsAfter ? ` Glucose went below range after ${a.lowsAfter} of ${a.total} corrections.` : '';
-  const body = `Across ${a.samples.length} corrections without food or other insulin nearby, each unit lowered glucose by about ${a.observedFactor} mg/dL (your setting: ${settingFactor}).${lowsText}`;
+  const lead = since ? `${since}across` : 'Across';
+  const body = `${lead} ${a.samples.length} corrections without food or other insulin nearby, each unit lowered glucose by about ${a.observedFactor} mg/dL (your ${setpoint ? 'setpoint' : 'setting'}: ${settingFactor}).${lowsText}`;
   if (Math.abs(diff) > CORRECTION_RULES.reviewThreshold || a.lowsAfter >= 2) {
     return {
       ...base,
       body,
-      suggestion: 'Your correction factor may be worth reviewing with your care team.',
+      suggestion: `Your correction ${setpoint ? 'setpoint' : 'factor'} may be worth reviewing with your care team.`,
       tone: 'attention',
       confidence: Math.min(1, a.samples.length / 10),
     };
   }
-  return { ...base, body: `${body} That matches your setting well.`, tone: 'positive', confidence: Math.min(1, a.samples.length / 10) };
+  return {
+    ...base,
+    body: `${body} That matches your ${setpoint ? 'setpoint' : 'setting'} well.`,
+    tone: 'positive',
+    confidence: Math.min(1, a.samples.length / 10),
+  };
 }

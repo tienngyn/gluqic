@@ -12,7 +12,7 @@ import { Screen } from '@/components/ui/Screen';
 import { SheetHeader } from '@/components/ui/SheetHeader';
 import { colors, spacing } from '@/constants/theme';
 import { resolveCarbRatio } from '@/domain/bolus/carbRatio';
-import { proposeSetpoint } from '@/domain/bolus/setpoint';
+import { proposeCorrectionSetpoint, proposeSetpoint } from '@/domain/bolus/setpoint';
 import { SetpointCard } from '@/features/bolus/SetpointCard';
 import { useAppStore } from '@/store/useAppStore';
 import { formatGlucose, MEAL_LABEL } from '@/utils/format';
@@ -23,7 +23,10 @@ export default function ConfirmBolus() {
   const unit = useAppStore((s) => s.user.glucoseUnit);
   const maxBolus = useAppStore((s) => s.insulinProfile.maxBolus);
   const saveBolus = useAppStore((s) => s.saveBolus);
+  const addGlucose = useAppStore((s) => s.addGlucose);
   const setRatioSetpoint = useAppStore((s) => s.setRatioSetpoint);
+  const setCorrectionSetpoint = useAppStore((s) => s.setCorrectionSetpoint);
+  const correctionFactor = useAppStore((s) => s.insulinProfile.correctionFactor);
   const carbRatios = useAppStore((s) => s.insulinProfile.carbRatios);
   const [units, setUnits] = useState(pending ? (pending.plannedUnits ?? pending.suggestedBolus).toFixed(1) : '');
   const [ack, setAck] = useState(false);
@@ -44,7 +47,7 @@ export default function ConfirmBolus() {
   const differs = taken != null && Math.abs(taken - pending.suggestedBolus) >= 0.05;
   const window = resolveCarbRatio(carbRatios, { mealType: pending.mealType });
   const proposal =
-    differs && taken != null && window
+    differs && taken != null && window && pending.carbs > 0
       ? proposeSetpoint({
           unitsTaken: taken,
           carbs: pending.carbs,
@@ -53,12 +56,46 @@ export default function ConfirmBolus() {
           currentGramsPerUnit: window.gramsPerUnit,
         })
       : null;
-  const setpointOn = makeSetpoint && !!proposal?.ok;
+  const correctionProposal =
+    differs && taken != null && pending.carbs === 0
+      ? proposeCorrectionSetpoint({
+          unitsTaken: taken,
+          currentGlucose: pending.currentGlucose,
+          targetGlucose: pending.targetGlucose,
+          activeInsulin: pending.activeInsulin,
+          currentFactor: correctionFactor,
+        })
+      : null;
+  const setpointOn = makeSetpoint && !!(proposal?.ok || correctionProposal?.ok);
   const mealLabel = MEAL_LABEL[pending.mealType].toLowerCase();
 
   const save = () => {
     if (invalid || overMax || !ack || taken == null) return;
-    const saved = saveBolus({ ...pending, confirmedUnits: taken, timestamp: new Date().toISOString() });
+    const at = new Date().toISOString();
+    const { plannedUnits: _u, plannedSetpoint: _s, logGlucose, ...calc } = pending;
+    if (logGlucose) {
+      // A typed-in value is the best "before" reading until delayed sensor data arrives.
+      addGlucose({
+        value: pending.currentGlucose,
+        timestamp: at,
+        context: pending.carbs > 0 ? 'before-meal' : 'other',
+        source: 'manual',
+      });
+    }
+    const saved = saveBolus({ ...calc, confirmedUnits: taken, timestamp: at });
+    if (setpointOn && correctionProposal?.ok) {
+      setCorrectionSetpoint({
+        factor: correctionProposal.factor,
+        origin: {
+          calculationId: saved.id,
+          unitsTaken: taken,
+          suggestedBolus: pending.suggestedBolus,
+          currentGlucose: pending.currentGlucose,
+          targetGlucose: pending.targetGlucose,
+          activeInsulin: pending.activeInsulin,
+        },
+      });
+    }
     if (setpointOn && proposal?.ok && window) {
       setRatioSetpoint({
         mealType: pending.mealType,
@@ -105,9 +142,28 @@ export default function ConfirmBolus() {
       {proposal && window ? (
         <View style={styles.card}>
           <SetpointCard
+            title={`Use as ${mealLabel} setpoint`}
+            summary={
+              proposal.ok
+                ? `Next ${mealLabel}s are calculated with 1 U : ${proposal.gramsPerUnit} g instead of 1 U : ${window.gramsPerUnit} g. gluciq tracks how they go from here.`
+                : ''
+            }
             proposal={proposal}
-            currentGramsPerUnit={window.gramsPerUnit}
-            mealLabel={mealLabel}
+            value={makeSetpoint}
+            onChange={setMakeSetpoint}
+          />
+        </View>
+      ) : null}
+      {correctionProposal ? (
+        <View style={styles.card}>
+          <SetpointCard
+            title="Use as correction setpoint"
+            summary={
+              correctionProposal.ok
+                ? `Corrections are calculated with 1 U : ${correctionProposal.factor} mg/dL instead of 1 U : ${correctionFactor} mg/dL — also the correction part of meal boluses. gluciq tracks how they go from here.`
+                : ''
+            }
+            proposal={correctionProposal}
             value={makeSetpoint}
             onChange={setMakeSetpoint}
           />

@@ -12,6 +12,7 @@ import type {
   BolusEvent,
   GlucoseRange,
   GlucoseReading,
+  CorrectionSetpoint,
   Insight,
   MealType,
   RatioSetpoint,
@@ -52,6 +53,8 @@ export type PatternInput = {
   /** From `analyzeCorrections`, compared against `correctionFactor`. */
   corrections?: CorrectionAnalysis;
   correctionFactor?: number;
+  /** Active correction setpoint; `corrections` should then cover only doses since it. */
+  correctionSetpoint?: CorrectionSetpoint;
 };
 
 function activeFor(setpoints: RatioSetpoint[] | undefined, mealType: MealType): RatioSetpoint | undefined {
@@ -276,9 +279,9 @@ export function detectSetpointOutcomes({ events, range, now, setpoints }: Patter
     .map((s) => setpointInsight(compareSetpoint(s, events, range), 'mg/dL', now));
 }
 
-export function detectCorrectionPatterns({ corrections, correctionFactor, now }: PatternInput): Insight[] {
+export function detectCorrectionPatterns({ corrections, correctionFactor, now, correctionSetpoint }: PatternInput): Insight[] {
   if (!corrections || !correctionFactor) return [];
-  const i = correctionInsight(corrections, correctionFactor, now);
+  const i = correctionInsight(corrections, correctionFactor, now, correctionSetpoint);
   return i ? [i] : [];
 }
 

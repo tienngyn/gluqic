@@ -64,12 +64,14 @@ export default function HomeScreen() {
         <MetricCard label="Active insulin" value={iob.toFixed(1)} unit="U" footnote="On board now" onPress={() => router.navigate('/bolus')} />
         <MetricCard
           label="Time in range"
-          value={String(stats.timeInRange)}
-          unit="%"
+          value={stats.count ? String(stats.timeInRange) : '—'}
+          unit={stats.count ? '%' : undefined}
           footnote={
-            previousStats.count
-              ? `${tirDelta >= 0 ? '+' : ''}${tirDelta} vs yesterday`
-              : 'Last 24 hours'
+            !stats.count
+              ? 'No readings yet'
+              : previousStats.count
+                ? `${tirDelta >= 0 ? '+' : ''}${tirDelta} vs yesterday`
+                : 'Last 24 hours'
           }
           footnoteColor={tirDelta >= 0 ? 'green' : 'muted'}
           onPress={() => router.navigate('/insights')}

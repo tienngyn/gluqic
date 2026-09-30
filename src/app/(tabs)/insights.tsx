@@ -109,7 +109,16 @@ export default function InsightsScreen() {
         </View>
       ) : null}
 
-      <Animated.View key={days} entering={FadeIn.duration(350)}>
+      {stats.count === 0 ? (
+        <Card style={styles.chartCard} padding={spacing.xl}>
+          <Text variant="headline">No glucose data for this period</Text>
+          <Text variant="callout" color="secondary" style={styles.emptyBody}>
+            Connect Apple Health or log readings. Charts appear with the first readings, patterns after about a week.
+          </Text>
+        </Card>
+      ) : null}
+
+      <Animated.View key={days} entering={FadeIn.duration(350)} style={stats.count === 0 && styles.hidden}>
         <Card style={styles.chartCard} padding={spacing.xl}>
           <View style={styles.chartHead}>
             <View>
@@ -269,6 +278,8 @@ function RangeLabel({ label, value }: { label: string; value: number }) {
 
 const styles = StyleSheet.create({
   custom: { marginTop: spacing.md },
+  emptyBody: { marginTop: spacing.sm },
+  hidden: { display: 'none' },
   chartCard: { marginTop: spacing.xl },
   chartHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   chartValue: { marginTop: 2 },

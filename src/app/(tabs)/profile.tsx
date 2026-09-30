@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Activity, Database, HeartPulse, Pen, Radio, RotateCcw, Scale, SlidersHorizontal, Target } from 'lucide-react-native';
+import { Activity, Database, Sparkles, HeartPulse, Pen, Radio, RotateCcw, Scale, SlidersHorizontal, Target } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/cards/Card';
@@ -23,6 +23,7 @@ export default function ProfileScreen() {
   const updateProfile = useAppStore((s) => s.updateProfile);
   const resetDemoData = useAppStore((s) => s.resetDemoData);
   const setpoints = useAppStore((s) => s.setpoints);
+  const correctionSetpoints = useAppStore((s) => s.correctionSetpoints);
   const unit = user.glucoseUnit;
 
   return (
@@ -57,7 +58,12 @@ export default function ProfileScreen() {
               </View>
             </View>
             <ListRow label="Target glucose" value={`${formatGlucose(profile.targetGlucose, unit)} ${unit}`} onPress={() => router.push('/profile/diabetes')} />
-            <ListRow label="Correction factor" value={`1 U : ${formatGlucose(profile.correctionFactor, unit)}`} onPress={() => router.push('/profile/diabetes')} />
+            <ListRow
+              label="Correction factor"
+              detail={correctionSetpoints.some((c) => !c.endedAt) ? 'Your setpoint' : undefined}
+              value={`1 U : ${formatGlucose(profile.correctionFactor, unit)}`}
+              onPress={() => router.push('/profile/diabetes')}
+            />
             <ListRow label="Insulin duration" value={`${profile.insulinDurationHours} h`} onPress={() => router.push('/profile/diabetes')} />
             <ListRow label="Max bolus" value={`${profile.maxBolus} U`} onPress={() => router.push('/profile/diabetes')} last />
           </View>
@@ -114,6 +120,7 @@ export default function ProfileScreen() {
       <Section title="Prototype">
         <Card padding={0}>
           <View style={styles.inset}>
+            <ListRow icon={icon(Sparkles)} label="Run setup again" detail="Units, insulin settings, safety limits, goals" onPress={() => router.push('/onboarding')} />
             <ListRow icon={icon(RotateCcw)} label="Reset demo data" detail="Regenerates 90 days of sample history" onPress={resetDemoData} chevron={false} last />
           </View>
         </Card>

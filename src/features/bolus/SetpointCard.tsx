@@ -4,20 +4,24 @@ import { Card } from '@/components/cards/Card';
 import { Text } from '@/components/typography/Text';
 import { Banner } from '@/components/ui/Banner';
 import { colors, spacing } from '@/constants/theme';
-import type { SetpointProposal } from '@/domain/bolus/setpoint';
 import { haptics } from '@/utils/haptics';
 
-/** Offer to turn a changed dose into the setpoint for this meal type. */
+export type SetpointOffer =
+  | { ok: true; steps: { label: string; formula: string; value: string }[]; caution?: string }
+  | { ok: false; reason: string };
+
+/** Offer to turn a changed dose into a setpoint (carb ratio or correction factor). */
 export function SetpointCard({
+  title,
+  summary,
   proposal,
-  currentGramsPerUnit,
-  mealLabel,
   value,
   onChange,
 }: {
-  proposal: SetpointProposal;
-  currentGramsPerUnit: number;
-  mealLabel: string;
+  title: string;
+  /** What changes if the setpoint is set, shown when the offer is valid. */
+  summary: string;
+  proposal: SetpointOffer;
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
@@ -25,11 +29,9 @@ export function SetpointCard({
     <Card variant="elevated" padding={spacing.lg + 2}>
       <View style={styles.head}>
         <View style={styles.text}>
-          <Text variant="bodyStrong">Use as {mealLabel} setpoint</Text>
+          <Text variant="bodyStrong">{title}</Text>
           <Text variant="label" color="secondary">
-            {proposal.ok
-              ? `Next ${mealLabel}s are calculated with 1 U : ${proposal.gramsPerUnit} g instead of 1 U : ${currentGramsPerUnit} g. gluciq tracks how they go from here.`
-              : proposal.reason}
+            {proposal.ok ? summary : proposal.reason}
           </Text>
         </View>
         {proposal.ok ? (
@@ -41,7 +43,7 @@ export function SetpointCard({
             }}
             trackColor={{ false: colors.elevatedHigh, true: colors.green }}
             thumbColor="#fff"
-            accessibilityLabel={`Use as ${mealLabel} setpoint`}
+            accessibilityLabel={title}
           />
         ) : null}
       </View>

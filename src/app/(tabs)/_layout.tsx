@@ -1,10 +1,14 @@
+import { Redirect } from 'expo-router';
 import { TabList, Tabs, TabSlot, TabTrigger } from 'expo-router/ui';
 import { StyleSheet } from 'react-native';
 
 import { BolusTabButton, FloatingTabBar, TAB_ICONS, TabButton } from '@/components/navigation/TabBar';
 import { colors } from '@/constants/theme';
+import { useAppStore } from '@/store/useAppStore';
 
 export default function TabLayout() {
+  const onboarded = useAppStore((s) => s.onboarded);
+  if (!onboarded) return <Redirect href="/onboarding" />;
   return (
     <Tabs style={styles.root}>
       <TabSlot style={styles.slot} />

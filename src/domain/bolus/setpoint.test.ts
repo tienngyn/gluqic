@@ -1,7 +1,7 @@
 import type { RatioSetpoint } from '@/types/models';
 
 import { calculateBolus } from './engine';
-import { activeSetpoint, proposeSetpoint } from './setpoint';
+import { activeSetpoint, proposeCorrectionSetpoint, proposeSetpoint } from './setpoint';
 
 const base = { carbs: 72, correctionBolus: 0.4, activeInsulin: 0, currentGramsPerUnit: 5 };
 
@@ -65,5 +65,38 @@ describe('activeSetpoint', () => {
     const list = [sp('a', '2026-09-01'), sp('b', '2026-09-10', '2026-09-20'), sp('c', '2026-09-05')];
     expect(activeSetpoint(list, 'breakfast')?.id).toBe('c');
     expect(activeSetpoint(list, 'lunch')).toBeUndefined();
+  });
+});
+
+describe('proposeCorrectionSetpoint', () => {
+  const c = { currentGlucose: 215, targetGlucose: 110, activeInsulin: 0, currentFactor: 35 };
+
+  it('derives the factor from the correction actually taken', () => {
+    // Suggested (215 − 110) ÷ 35 = 3 U; took 2 U → 105 ÷ 2 = 52.5 → 53
+    const p = proposeCorrectionSetpoint({ ...c, unitsTaken: 2 });
+    if (!p.ok) throw new Error(p.reason);
+    expect(p.factor).toBe(53);
+    expect(p.steps.map((s) => s.value)).toEqual(['2 U', '1 U : 53 mg/dL']);
+    expect(p.caution).toMatch(/less correction insulin/);
+  });
+
+  it('adds active insulin back in', () => {
+    const p = proposeCorrectionSetpoint({ ...c, unitsTaken: 2, activeInsulin: 1 });
+    expect(p.ok && p.factor).toBe(35);
+  });
+
+  it('makes the next correction use the new factor', () => {
+    const next = calculateBolus(
+      { currentGlucose: 216, targetGlucose: 110, carbsGrams: 0, carbRatio: 5, correctionFactor: 53, activeInsulin: 0 },
+      { maxBolus: 20, minGlucoseForBolus: 70, doseIncrement: 0.5 },
+    );
+    expect(next.ok && next.breakdown.suggestedBolus).toBe(2);
+  });
+
+  it('refuses when glucose is near target, the dose is 0, or the change is extreme', () => {
+    expect(proposeCorrectionSetpoint({ ...c, currentGlucose: 120, unitsTaken: 1 }).ok).toBe(false);
+    expect(proposeCorrectionSetpoint({ ...c, unitsTaken: 0 }).ok).toBe(false);
+    expect(proposeCorrectionSetpoint({ ...c, unitsTaken: 1 }).ok).toBe(false);
+    expect(proposeCorrectionSetpoint({ ...c, unitsTaken: 8 }).ok).toBe(false);
   });
 });

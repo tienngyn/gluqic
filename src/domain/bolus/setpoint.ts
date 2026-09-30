@@ -11,7 +11,7 @@
  * Deterministic and pure. It only proposes a ratio; the user decides whether
  * it becomes the setpoint.
  */
-import type { RatioSetpoint } from '@/types/models';
+import type { CorrectionSetpoint, RatioSetpoint } from '@/types/models';
 
 import { roundTo } from './engine';
 
@@ -90,6 +90,87 @@ export function activeSetpoint(setpoints: RatioSetpoint[], mealType: string): Ra
   let latest: RatioSetpoint | undefined;
   for (const s of setpoints) {
     if (s.mealType !== mealType || s.endedAt) continue;
+    if (!latest || s.createdAt > latest.createdAt) latest = s;
+  }
+  return latest;
+}
+
+export type CorrectionSetpointInput = {
+  unitsTaken: number;
+  currentGlucose: number;
+  targetGlucose: number;
+  activeInsulin: number;
+  currentFactor: number;
+};
+
+export type CorrectionSetpointProposal =
+  | {
+      ok: true;
+      factor: number;
+      correctionUnits: number;
+      insulinChange: number;
+      caution?: string;
+      steps: { label: string; formula: string; value: string }[];
+    }
+  | { ok: false; reason: string };
+
+/** Glucose must be at least this far above target to derive a factor. */
+export const MIN_CORRECTION_GAP = 20;
+
+/**
+ * Correction-only dose → correction factor.
+ *
+ *   suggested        = (glucose − target) ÷ CF − IOB
+ *   correctionUnits  = unitsTaken + IOB
+ *   CF               = (glucose − target) ÷ correctionUnits
+ */
+export function proposeCorrectionSetpoint(i: CorrectionSetpointInput): CorrectionSetpointProposal {
+  const gap = i.currentGlucose - i.targetGlucose;
+  if (gap < MIN_CORRECTION_GAP) {
+    return { ok: false, reason: `A correction setpoint needs glucose at least ${MIN_CORRECTION_GAP} mg/dL above target.` };
+  }
+  if (!(i.unitsTaken > 0)) return { ok: false, reason: 'A correction setpoint needs a dose above 0 U.' };
+  const correctionUnits = i.unitsTaken + i.activeInsulin;
+  const factor = Math.round(gap / correctionUnits);
+  if (factor < 5 || factor > 400) {
+    return { ok: false, reason: 'That would mean a correction factor outside 5–400 mg/dL per unit.' };
+  }
+  const ratio = i.currentFactor / factor;
+  if (ratio > MAX_SETPOINT_FACTOR || ratio < 1 / MAX_SETPOINT_FACTOR) {
+    return {
+      ok: false,
+      reason: 'That is more than double or less than half your current factor. Change it in Diabetes settings with your care team instead.',
+    };
+  }
+  const insulinChange = roundTo(ratio - 1, 3);
+  return {
+    ok: true,
+    factor,
+    correctionUnits: roundTo(correctionUnits, 2),
+    insulinChange,
+    steps: [
+      {
+        label: 'Insulin for the correction',
+        formula: `${roundTo(i.unitsTaken, 2)} U taken + ${roundTo(i.activeInsulin, 2)} active`,
+        value: `${roundTo(correctionUnits, 2)} U`,
+      },
+      {
+        label: 'New correction factor',
+        formula: `(${Math.round(i.currentGlucose)} − ${Math.round(i.targetGlucose)}) ÷ ${roundTo(correctionUnits, 2)} U`,
+        value: `1 U : ${factor} mg/dL`,
+      },
+    ],
+    caution:
+      Math.abs(insulinChange) > CAUTION_CHANGE
+        ? `This is ${Math.round(Math.abs(insulinChange) * 100)}% ${insulinChange > 0 ? 'more' : 'less'} correction insulin than before. Make sure that is intended.`
+        : undefined,
+  };
+}
+
+export function activeCorrectionSetpoint(setpoints: CorrectionSetpoint[]): CorrectionSetpoint | undefined {
+  let latest: CorrectionSetpoint | undefined;
+  for (const s of setpoints) {
+    if (s.endedAt) continue;
     if (!latest || s.createdAt > latest.createdAt) latest = s;
   }
   return latest;

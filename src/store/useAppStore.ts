@@ -12,6 +12,7 @@ import type {
   ActivityEntry,
   BolusCalculation,
   CarbRatioWindow,
+  CorrectionSetpoint,
   FoodItem,
   GlucoseRange,
   GlucoseReading,
@@ -39,6 +40,8 @@ export type PendingBolus =
       plannedUnits?: number;
       /** Whether the user already chose to make it a setpoint. */
       plannedSetpoint?: boolean;
+      /** Glucose was typed in (not a fresh sensor value): save it as a reading too. */
+      logGlucose?: boolean;
     })
   | null;
 
@@ -58,10 +61,25 @@ type State = {
   customFoods: FoodItem[];
   bolusHistory: BolusCalculation[];
   setpoints: RatioSetpoint[];
+  correctionSetpoints: CorrectionSetpoint[];
   bolusDraft: BolusDraft;
   pendingBolus: PendingBolus;
   /** Set when the user confirms a calculation in this session. */
   lastSavedBolusId: string | null;
+  /** False until the user finishes setup or chooses to explore sample data. */
+  onboarded: boolean;
+};
+
+export type OnboardingResult = {
+  name: string;
+  glucoseUnit: UserProfile['glucoseUnit'];
+  glucoseSource: NonNullable<UserProfile['glucoseSource']>;
+  insulin: Pick<
+    InsulinProfile,
+    'targetGlucose' | 'correctionFactor' | 'insulinDurationHours' | 'maxBolus' | 'minGlucoseForBolus' | 'doseIncrement'
+  > & { gramsPerUnit: Record<MealType, number> };
+  goals: NutritionGoals;
+  keepSampleData: boolean;
 };
 
 type Actions = {
@@ -79,12 +97,20 @@ type Actions = {
   setRatioSetpoint: (sp: Omit<RatioSetpoint, 'id' | 'createdAt' | 'previousGramsPerUnit'>) => RatioSetpoint | null;
   /** Ends the setpoint and restores the ratio that was in place before it. */
   resetSetpoint: (id: string) => void;
+  /** Explicit user action: make this the correction factor. */
+  setCorrectionSetpoint: (sp: Omit<CorrectionSetpoint, 'id' | 'createdAt' | 'previousFactor'>) => CorrectionSetpoint;
+  /** Ends the correction setpoint and restores the previous factor. */
+  resetCorrectionSetpoint: (id: string) => void;
   updateProfile: (p: Partial<UserProfile>) => void;
   updateInsulinProfile: (p: Partial<Omit<InsulinProfile, 'carbRatios'>>) => void;
   updateCarbRatio: (id: string, patch: Partial<CarbRatioWindow>) => void;
   updateNutritionGoals: (g: Partial<NutritionGoals>) => void;
   updateWeightGoal: (g: Partial<WeightGoal>) => void;
   resetDemoData: () => void;
+  /** Applies the user's setup. Sample history is kept or cleared on request. */
+  completeOnboarding: (r: OnboardingResult) => void;
+  /** Skip setup and look around with the sample profile. */
+  exploreSampleData: () => void;
 };
 
 function seedState(): State {
@@ -105,9 +131,11 @@ function seedState(): State {
     customFoods: [],
     bolusHistory: seed.bolusHistory,
     setpoints: seed.setpoints,
+    correctionSetpoints: [],
     bolusDraft: null,
     pendingBolus: null,
     lastSavedBolusId: null,
+    onboarded: false,
   };
 }
 
@@ -231,7 +259,47 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
   updateProfile: (p) => set((s) => ({ user: { ...s.user, ...p } })),
 
   // Settings change only through explicit user edits — never automatically.
-  updateInsulinProfile: (p) => set((s) => ({ insulinProfile: { ...s.insulinProfile, ...p } })),
+  setCorrectionSetpoint: (input) => {
+    const now = new Date().toISOString();
+    const setpoint: CorrectionSetpoint = {
+      ...input,
+      id: uid('csetpoint'),
+      createdAt: now,
+      previousFactor: get().insulinProfile.correctionFactor,
+    };
+    set((s) => ({
+      correctionSetpoints: [
+        ...s.correctionSetpoints.map((x) => (x.endedAt ? x : { ...x, endedAt: now, endReason: 'new-setpoint' as const })),
+        setpoint,
+      ],
+      insulinProfile: { ...s.insulinProfile, correctionFactor: input.factor },
+    }));
+    return setpoint;
+  },
+
+  resetCorrectionSetpoint: (id) =>
+    set((s) => {
+      const sp = s.correctionSetpoints.find((x) => x.id === id);
+      if (!sp || sp.endedAt) return {};
+      return {
+        correctionSetpoints: s.correctionSetpoints.map((x) =>
+          x.id === id ? { ...x, endedAt: new Date().toISOString(), endReason: 'reset' as const } : x,
+        ),
+        insulinProfile: { ...s.insulinProfile, correctionFactor: sp.previousFactor },
+      };
+    }),
+
+  updateInsulinProfile: (p) =>
+    set((s) => ({
+      // Editing the correction factor by hand ends a correction setpoint.
+      correctionSetpoints:
+        p.correctionFactor != null && p.correctionFactor !== s.insulinProfile.correctionFactor
+          ? s.correctionSetpoints.map((x) =>
+              x.endedAt ? x : { ...x, endedAt: new Date().toISOString(), endReason: 'manual-edit' as const },
+            )
+          : s.correctionSetpoints,
+      insulinProfile: { ...s.insulinProfile, ...p },
+    })),
 
   updateCarbRatio: (id, patch) =>
     set((s) => ({
@@ -255,7 +323,47 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
 
   updateWeightGoal: (g) => set((s) => ({ weightGoal: { ...s.weightGoal, ...g } })),
 
-  resetDemoData: () => set(seedState()),
+  resetDemoData: () => set({ ...seedState(), onboarded: true }),
+
+  completeOnboarding: (r) =>
+    set((s) => {
+      const now = new Date().toISOString();
+      const insulinProfile: InsulinProfile = {
+        ...s.insulinProfile,
+        targetGlucose: r.insulin.targetGlucose,
+        correctionFactor: r.insulin.correctionFactor,
+        insulinDurationHours: r.insulin.insulinDurationHours,
+        maxBolus: r.insulin.maxBolus,
+        minGlucoseForBolus: r.insulin.minGlucoseForBolus,
+        doseIncrement: r.insulin.doseIncrement,
+        carbRatios: s.insulinProfile.carbRatios.map((c) => ({ ...c, gramsPerUnit: r.insulin.gramsPerUnit[c.mealType] })),
+      };
+      const user = { ...s.user, name: r.name, glucoseUnit: r.glucoseUnit, glucoseSource: r.glucoseSource, createdAt: now };
+      const base = { user, insulinProfile, nutritionGoals: r.goals, onboarded: true, bolusDraft: null, pendingBolus: null };
+      if (r.keepSampleData) {
+        // Sample setpoints described the sample profile; the user's values replace them.
+        return {
+          ...base,
+          setpoints: s.setpoints.map((x) => (x.endedAt ? x : { ...x, endedAt: now, endReason: 'manual-edit' as const })),
+          correctionSetpoints: [],
+        };
+      }
+      return {
+        ...base,
+        glucose: [],
+        insulin: [],
+        meals: [],
+        activities: [],
+        weights: [],
+        notes: [],
+        bolusHistory: [],
+        setpoints: [],
+        correctionSetpoints: [],
+        lastSavedBolusId: null,
+      };
+    }),
+
+  exploreSampleData: () => set({ onboarded: true }),
 }));
 
 export const getState = () => useAppStore.getState();

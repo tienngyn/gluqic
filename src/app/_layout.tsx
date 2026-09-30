@@ -35,6 +35,7 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="onboarding" options={{ gestureEnabled: false, animation: 'fade' }} />
             <Stack.Screen name="log/glucose" options={sheet} />
             <Stack.Screen name="log/insulin" options={sheet} />
             <Stack.Screen name="log/weight" options={sheet} />

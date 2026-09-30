@@ -22,10 +22,14 @@ export type GlucoseContext =
 
 export type DataSource = 'manual' | 'healthkit' | 'cgm';
 
+export type GlucoseSource = 'dexcom' | 'libre' | 'other-cgm' | 'meter';
+
 export type UserProfile = {
   id: string;
   name: string;
   glucoseUnit: GlucoseUnit;
+  /** How the user measures glucose; shapes hints about delayed sensor data. */
+  glucoseSource?: GlucoseSource;
   createdAt: string;
 };
 
@@ -189,6 +193,29 @@ export type RatioSetpoint = {
     suggestedBolus: number;
     carbs: number;
     correctionBolus: number;
+    activeInsulin: number;
+  };
+  endedAt?: string;
+  endReason?: 'reset' | 'new-setpoint' | 'manual-edit';
+};
+
+/**
+ * A correction factor the user set explicitly by taking a different
+ * correction than suggested. Same rules as `RatioSetpoint`: only the user
+ * creates, ends or resets it.
+ */
+export type CorrectionSetpoint = {
+  id: string;
+  /** mg/dL per 1 U from now on */
+  factor: number;
+  previousFactor: number;
+  createdAt: string;
+  origin: {
+    calculationId?: string;
+    unitsTaken: number;
+    suggestedBolus: number;
+    currentGlucose: number;
+    targetGlucose: number;
     activeInsulin: number;
   };
   endedAt?: string;

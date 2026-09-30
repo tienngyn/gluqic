@@ -15,16 +15,16 @@ import { IconButton } from '@/components/ui/SheetHeader';
 import { colors, spacing } from '@/constants/theme';
 import { resolveCarbRatio, suggestMealType } from '@/domain/bolus/carbRatio';
 import { calculateBolus, type PlannedActivity } from '@/domain/bolus/engine';
-import { proposeSetpoint } from '@/domain/bolus/setpoint';
+import { proposeCorrectionSetpoint, proposeSetpoint } from '@/domain/bolus/setpoint';
 import { findSimilarMeals, summarizeOutcomes } from '@/domain/insights/similarMeals';
 import { BolusResultCard } from '@/features/bolus/BolusResultCard';
 import { DoseAdjuster } from '@/features/bolus/DoseAdjuster';
 import { SetpointCard } from '@/features/bolus/SetpointCard';
 import { bolusFormSchema, mapEngineErrors, type BolusFormValues } from '@/features/bolus/form';
-import { useActiveInsulin, useActiveSetpoint, useBolusEvents, useCurrentGlucose, useNow } from '@/hooks/useDerived';
+import { useActiveCorrectionSetpoint, useActiveInsulin, useActiveSetpoint, useBolusEvents, useCurrentGlucose, useNow } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
-import type { MealType } from '@/types/models';
-import { formatDay, formatTime, fromDisplayGlucose, MEAL_LABEL, MEAL_TYPES, relativeTime, toDisplayGlucose, TREND_META } from '@/utils/format';
+import type { GlucoseTrend, MealType } from '@/types/models';
+import { formatDay, formatGlucose, formatTime, fromDisplayGlucose, MEAL_LABEL, MEAL_TYPES, relativeTime, toDisplayGlucose, TREND_META } from '@/utils/format';
 import { haptics } from '@/utils/haptics';
 
 const ACTIVITY: { value: PlannedActivity; label: string }[] = [
@@ -42,23 +42,24 @@ export default function BolusScreen() {
   const draft = useAppStore((s) => s.bolusDraft);
   const lastSaved = useAppStore((s) => s.bolusHistory.find((b) => b.id === s.lastSavedBolusId));
   const setPendingBolus = useAppStore((s) => s.setPendingBolus);
-  const { latest, trend } = useCurrentGlucose(now);
+  const { latest, trend, fresh } = useCurrentGlucose(now);
   const iob = useActiveInsulin(now);
   const events = useBolusEvents();
 
   const defaults = useMemo<BolusFormValues>(
     () => ({
-      glucose: latest ? String(toDisplayGlucose(latest.value, unit)) : '',
+      // Only a fresh sensor value may stand in for "current" glucose.
+      glucose: latest && fresh ? String(toDisplayGlucose(latest.value, unit)) : '',
       carbs: draft ? String(Math.round(draft.carbs)) : '',
       activeInsulin: iob.toFixed(1),
       target: String(toDisplayGlucose(profile.targetGlucose, unit)),
       mealType: draft?.mealType ?? suggestMealType(profile.carbRatios, now),
       activity: 'none',
-      trend,
+      trend: fresh ? trend : undefined,
     }),
     // Defaults are captured when the screen gains focus, not on every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [latest?.id, draft, unit, profile.targetGlucose],
+    [latest?.id, fresh, draft, unit, profile.targetGlucose],
   );
 
   const { control, reset, handleSubmit, formState } = useForm<BolusFormValues>({
@@ -83,6 +84,8 @@ export default function BolusScreen() {
   const ratio = resolveCarbRatio(profile.carbRatios, { mealType, at: now });
   const setpoint = useActiveSetpoint(mealType);
   const resetSetpoint = useAppStore((s) => s.resetSetpoint);
+  const correctionSetpoint = useActiveCorrectionSetpoint();
+  const resetCorrectionSetpoint = useAppStore((s) => s.resetCorrectionSetpoint);
 
   const result = useMemo(() => {
     const glucose = parseNumber(values.glucose ?? '');
@@ -151,6 +154,17 @@ export default function BolusScreen() {
           currentGramsPerUnit: ratio.gramsPerUnit,
         })
       : null;
+  const correctionProposal =
+    result.ok && result.input.carbsGrams === 0 && takeDiffers && take != null
+      ? proposeCorrectionSetpoint({
+          unitsTaken: take,
+          currentGlucose: result.input.currentGlucose,
+          targetGlucose: result.input.targetGlucose,
+          activeInsulin: result.input.activeInsulin,
+          currentFactor: profile.correctionFactor,
+        })
+      : null;
+  const setpointReady = makeSetpoint && !!(proposal?.ok || correctionProposal?.ok);
 
   const onReview = handleSubmit(() => {
     if (!result.ok || !ratio || take == null || takeOverMax) return;
@@ -171,7 +185,8 @@ export default function BolusScreen() {
       calculationVersion: result.version,
       timestamp: new Date().toISOString(),
       plannedUnits: takeDiffers ? take : undefined,
-      plannedSetpoint: takeDiffers && makeSetpoint && !!proposal?.ok,
+      plannedSetpoint: takeDiffers && setpointReady,
+      logGlucose: !(latest && fresh && values.glucose === String(toDisplayGlucose(latest.value, unit))),
     });
     router.push('/bolus/confirm');
   });
@@ -221,11 +236,41 @@ export default function BolusScreen() {
               onBlur={field.onBlur}
               decimal={unit === 'mmol/L'}
               error={fieldError('glucose')}
-              hint={latest ? `Sensor · ${relativeTime(latest.timestamp, now)} ${TREND_META[trend].arrow}` : undefined}
+              hint={
+                latest && fresh
+                  ? field.value === String(toDisplayGlucose(latest.value, unit))
+                    ? `Sensor · ${relativeTime(latest.timestamp, now)} ${TREND_META[trend].arrow}`
+                    : 'Entered by you · saved as a reading'
+                  : latest
+                    ? `Last sensor value is from ${relativeTime(latest.timestamp, now)}. Enter the current value from your CGM app.`
+                    : 'Enter the current value from your CGM app or meter.'
+              }
             />
           )}
         />
       </View>
+      {!fresh ? (
+        <View style={styles.trendRow}>
+          <Text variant="label" color="secondary">
+            Trend in your CGM app (optional)
+          </Text>
+          <Controller
+            control={control}
+            name="trend"
+            render={({ field }) => (
+              <ChipGroup<GlucoseTrend>
+                value={field.value}
+                onChange={(v) => field.onChange(field.value === v ? undefined : v)}
+                options={[
+                  { value: 'rising', label: '↗ Rising' },
+                  { value: 'stable', label: '→ Stable' },
+                  { value: 'falling', label: '↘ Falling' },
+                ]}
+              />
+            )}
+          />
+        </View>
+      ) : null}
       <View style={styles.row}>
         <Controller
           control={control}
@@ -328,6 +373,31 @@ export default function BolusScreen() {
           )}
         />
       </View>
+      {correctionSetpoint ? (
+        <View style={[styles.setpoint, styles.correctionSetpoint]}>
+          <View style={styles.setpointText}>
+            <Text variant="label">
+              Correction setpoint · 1 U : {formatGlucose(profile.correctionFactor, unit)} {unit}
+            </Text>
+            <Text variant="caption" color="muted">
+              Set {formatDay(correctionSetpoint.createdAt, now).replace(/^(Today|Yesterday)$/, (d) => d.toLowerCase())} · was 1 U :{' '}
+              {formatGlucose(correctionSetpoint.previousFactor, unit)}
+            </Text>
+          </View>
+          <Text
+            variant="label"
+            color="secondary"
+            accessibilityRole="button"
+            accessibilityLabel="Reset correction setpoint"
+            onPress={() => {
+              haptics.light();
+              resetCorrectionSetpoint(correctionSetpoint.id);
+            }}
+            style={styles.reset}>
+            Reset
+          </Text>
+        </View>
+      ) : null}
 
       <Section title="Planned activity" style={styles.sectionTight}>
         <Controller
@@ -344,6 +414,7 @@ export default function BolusScreen() {
           unit={unit}
           similar={similar}
           setpointSince={setpoint ? formatDay(setpoint.createdAt, now) : undefined}
+          correctionSetpoint={!!correctionSetpoint}
           adjuster={
             result.ok && !result.blocked && suggested != null ? (
               <DoseAdjuster
@@ -359,9 +430,25 @@ export default function BolusScreen() {
               <Banner tone="critical" message={`Above your max bolus of ${profile.maxBolus} U.`} />
             ) : proposal && ratio ? (
               <SetpointCard
+                title={`Use as ${MEAL_LABEL[mealType].toLowerCase()} setpoint`}
+                summary={
+                  proposal.ok
+                    ? `Next ${MEAL_LABEL[mealType].toLowerCase()}s are calculated with 1 U : ${proposal.gramsPerUnit} g instead of 1 U : ${ratio.gramsPerUnit} g. gluciq tracks how they go from here.`
+                    : ''
+                }
                 proposal={proposal}
-                currentGramsPerUnit={ratio.gramsPerUnit}
-                mealLabel={MEAL_LABEL[mealType].toLowerCase()}
+                value={makeSetpoint}
+                onChange={setMakeSetpoint}
+              />
+            ) : correctionProposal ? (
+              <SetpointCard
+                title="Use as correction setpoint"
+                summary={
+                  correctionProposal.ok
+                    ? `Corrections are calculated with 1 U : ${formatGlucose(correctionProposal.factor, unit)} instead of 1 U : ${formatGlucose(profile.correctionFactor, unit)} ${unit} — also the correction part of meal boluses. gluciq tracks how they go from here.`
+                    : ''
+                }
+                proposal={correctionProposal}
                 value={makeSetpoint}
                 onChange={setMakeSetpoint}
               />
@@ -371,7 +458,7 @@ export default function BolusScreen() {
       </View>
 
       <Button
-        label={takeDiffers && take != null ? `Review ${take.toFixed(1)} U${makeSetpoint && proposal?.ok ? ' + setpoint' : ''}` : 'Review & save'}
+        label={takeDiffers && take != null ? `Review ${take.toFixed(1)} U${setpointReady ? ' + setpoint' : ''}` : 'Review & save'}
         onPress={onReview}
         disabled={!result.ok || !ratio || take == null || takeOverMax}
         style={styles.cta}
@@ -388,6 +475,7 @@ const styles = StyleSheet.create({
   badgeText: { flex: 1 },
   saved: { marginBottom: spacing.lg },
   row: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  trendRow: { gap: spacing.sm, marginBottom: spacing.lg },
   flex: { flex: 1 },
   sectionTight: { marginTop: spacing.xl },
   ratio: { marginTop: spacing.md },
@@ -404,6 +492,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   setpointText: { flex: 1, gap: 2 },
+  correctionSetpoint: { marginTop: 0, marginBottom: spacing.md },
   reset: { paddingVertical: 4, paddingLeft: 8 },
   result: { marginTop: spacing.xxxl },
   cta: { marginTop: spacing.xxxl },

@@ -23,6 +23,7 @@ export function BolusResultCard({
   setpointSince,
   adjuster,
   afterCard,
+  correctionSetpoint,
 }: {
   result: Ok | null;
   mealType: MealType;
@@ -34,6 +35,8 @@ export function BolusResultCard({
   adjuster?: ReactNode;
   /** Rendered between the card and the explanation, e.g. the setpoint offer. */
   afterCard?: ReactNode;
+  /** The correction factor comes from a user setpoint. */
+  correctionSetpoint?: boolean;
 }) {
   if (!result) {
     return (
@@ -123,7 +126,8 @@ export function BolusResultCard({
         <Text variant="callout" color="secondary" style={styles.whyBody}>
           {setpointSince ? `Your ${mealLabel} setpoint from ${setpointSince.replace(/^(Today|Yesterday)$/, (d) => d.toLowerCase())}` : `Your ${mealLabel} ratio`} covers{' '}
           {input.carbRatio} g per unit, and each unit lowers glucose about{' '}
-          {formatGlucose(input.correctionFactor, unit)} {unit}. You are{' '}
+          {formatGlucose(input.correctionFactor, unit)} {unit}
+          {correctionSetpoint ? ' (your correction setpoint)' : ''}. You are{' '}
           {input.currentGlucose === input.targetGlucose ? 'at' : input.currentGlucose > input.targetGlucose ? 'above' : 'below'} your target of{' '}
           {formatGlucose(input.targetGlucose, unit)} {unit}, and {input.activeInsulin.toFixed(1)} U is still active.
         </Text>

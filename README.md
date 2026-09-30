@@ -59,13 +59,22 @@ ratio     = carbs ÷ mealUnits                            e.g. 72 g ÷ 15.6 U = 
 
 The demo data includes a breakfast setpoint from 14 days ago (1 U : 5 g → 1 U : 4.6 g).
 
+## Onboarding
+
+On first launch a six-step setup asks for name, glucose unit and target, how you measure (Dexcom / Libre / other CGM / meter), correction factor, insulin duration, carb ratios, safety limits (max bolus, no-insulin threshold, dose step, prototype acknowledgement) and nutrition goals. You can keep the sample history or start empty, or skip setup and explore the sample profile. Profile → *Run setup again* reopens it with your current values.
+
+## Delayed sensor data
+
+Apple Health receives some CGM data hours late (Dexcom: about 3 h). gluciq therefore only pre-fills the Bolus calculator with a sensor value that is at most 15 minutes old (`SENSOR_FRESH_MIN`). Otherwise the field stays empty with a hint to type in the value from the CGM app, an optional trend can be picked, and the typed value is saved as a reading with the bolus. Active insulin is never delayed (doses are logged in gluciq), and learning uses the delayed data once it arrives.
+
 ## Corrections
 
 - **Log one:** Home → **+ Insulin** → type **Correction** (the default), or use the Bolus tab with **0 g carbs** for a calculated correction (saved as a correction).
 - **Active insulin:** every rapid dose, meal or correction, counts as insulin on board and is subtracted in the next calculation.
 - **Meal learning:** a meal followed by a correction (20 min – 3 h later) counts as having run high, even if the 2 h reading looks fine. Correction doses are never mistaken for the meal dose. Untagged doses are classified by timing (within 45 min of a meal → meal dose).
 - **Correction learning:** `analyzeCorrections` looks at clean corrections (no meal 2.5 h before / 3 h after, no other rapid insulin ±3 h), measures the drop per unit (lowest reading 2–4 h later), and compares the median with your correction factor. More than 20 % off, or repeated lows after corrections → suggests reviewing the correction factor. It never changes it.
-- Logic: `src/domain/insulin/purpose.ts`, `src/domain/insights/corrections.ts`, `bolusEvents.ts`, `similarMeals.ts` (with tests).
+- **Correction setpoint:** with 0 g carbs, taking a different amount than suggested offers “Use as correction setpoint”: `CF = (glucose − target) ÷ (units taken + IOB)`, e.g. 215 mg/dL, target 110, took 2 U instead of 3 U → 1 U : 53 mg/dL. It then applies to corrections and to the correction part of meal boluses, can be reset, ends when you edit the factor by hand, and the correction card tracks only corrections since it.
+- Logic: `src/domain/insulin/purpose.ts`, `src/domain/insights/corrections.ts`, `src/domain/bolus/setpoint.ts`, `bolusEvents.ts`, `similarMeals.ts` (with tests).
 
 ## Architecture
 

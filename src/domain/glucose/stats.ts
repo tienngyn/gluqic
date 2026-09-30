@@ -1,5 +1,11 @@
 import type { GlucoseRange, GlucoseReading, GlucoseTrend } from '@/types/models';
 
+/**
+ * A sensor value older than this is not used as "current" glucose for a
+ * calculation. Apple Health data from some CGMs arrives hours late.
+ */
+export const SENSOR_FRESH_MIN = 15;
+
 export const DEFAULT_RANGE: GlucoseRange = { veryLow: 54, low: 70, high: 180, veryHigh: 250 };
 
 export type GlucoseStats = {
