@@ -1,5 +1,17 @@
 import { router } from 'expo-router';
-import { Activity, Database, Sparkles, HeartPulse, Pen, Radio, RotateCcw, Scale, SlidersHorizontal, Target } from 'lucide-react-native';
+import {
+  Activity,
+  Database,
+  HeartPulse,
+  Pen,
+  Radio,
+  RefreshCw,
+  RotateCcw,
+  Scale,
+  SlidersHorizontal,
+  Sparkles,
+  Target,
+} from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/cards/Card';
@@ -22,6 +34,8 @@ export default function ProfileScreen() {
   const latestWeight = useAppStore((s) => s.weights[s.weights.length - 1]);
   const updateProfile = useAppStore((s) => s.updateProfile);
   const resetDemoData = useAppStore((s) => s.resetDemoData);
+  const delayedCount = useAppStore((s) => s.delayedGlucose.length);
+  const releaseDelayedSensor = useAppStore((s) => s.releaseDelayedSensor);
   const setpoints = useAppStore((s) => s.setpoints);
   const correctionSetpoints = useAppStore((s) => s.correctionSetpoints);
   const unit = user.glucoseUnit;
@@ -121,6 +135,15 @@ export default function ProfileScreen() {
         <Card padding={0}>
           <View style={styles.inset}>
             <ListRow icon={icon(Sparkles)} label="Run setup again" detail="Units, insulin settings, safety limits, goals" onPress={() => router.push('/onboarding')} />
+            {delayedCount ? (
+              <ListRow
+                icon={icon(RefreshCw)}
+                label="Simulate Apple Health sync"
+                detail={`Delivers ${delayedCount} delayed Dexcom readings now instead of in 3 h`}
+                onPress={() => releaseDelayedSensor(new Date(), true)}
+                chevron={false}
+              />
+            ) : null}
             <ListRow icon={icon(RotateCcw)} label="Reset demo data" detail="Regenerates 90 days of sample history" onPress={resetDemoData} chevron={false} last />
           </View>
         </Card>

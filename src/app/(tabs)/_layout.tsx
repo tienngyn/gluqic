@@ -1,13 +1,22 @@
 import { Redirect } from 'expo-router';
 import { TabList, Tabs, TabSlot, TabTrigger } from 'expo-router/ui';
+import { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { BolusTabButton, FloatingTabBar, TAB_ICONS, TabButton } from '@/components/navigation/TabBar';
 import { colors } from '@/constants/theme';
+import { useNow } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 
 export default function TabLayout() {
   const onboarded = useAppStore((s) => s.onboarded);
+  const releaseDelayedSensor = useAppStore((s) => s.releaseDelayedSensor);
+  const now = useNow();
+  // Prototype: delayed sensor readings "arrive" once they are old enough.
+  useEffect(() => {
+    releaseDelayedSensor(now);
+  }, [now, releaseDelayedSensor]);
+
   if (!onboarded) return <Redirect href="/onboarding" />;
   return (
     <Tabs style={styles.root}>

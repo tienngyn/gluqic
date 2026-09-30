@@ -45,7 +45,18 @@ function describe(e: TimelineEvent, unit: GlucoseUnit): { title: string; detail?
   }
 }
 
-export function TimelineRow({ event, unit, last }: { event: TimelineEvent; unit: GlucoseUnit; last?: boolean }) {
+export function TimelineRow({
+  event,
+  unit,
+  last,
+  note,
+}: {
+  event: TimelineEvent;
+  unit: GlucoseUnit;
+  last?: boolean;
+  /** Extra status line, e.g. how a typed value matched the sensor. */
+  note?: { text: string; color: TextColor };
+}) {
   const d = describe(event, unit);
   return (
     <View style={styles.row}>
@@ -71,6 +82,11 @@ export function TimelineRow({ event, unit, last }: { event: TimelineEvent; unit:
         {d.detail ? (
           <Text variant="label" color="secondary" numberOfLines={1}>
             {d.detail}
+          </Text>
+        ) : null}
+        {note ? (
+          <Text variant="label" color={note.color} numberOfLines={2}>
+            {note.text}
           </Text>
         ) : null}
       </View>

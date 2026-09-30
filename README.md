@@ -67,6 +67,10 @@ On first launch a six-step setup asks for name, glucose unit and target, how you
 
 Apple Health receives some CGM data hours late (Dexcom: about 3 h). gluciq therefore only pre-fills the Bolus calculator with a sensor value that is at most 15 minutes old (`SENSOR_FRESH_MIN`). Otherwise the field stays empty with a hint to type in the value from the CGM app, an optional trend can be picked, and the typed value is saved as a reading with the bolus. Active insulin is never delayed (doses are logged in gluciq), and learning uses the delayed data once it arrives.
 
+**Matching typed values to delayed sensor data** (`src/domain/glucose/matching.ts`): sensor readings carry their measurement time, so when they arrive, each typed value is linked to the sensor reading within ±10 min whose value is closest (people often read the CGM app a few minutes before typing). Agreement uses the ISO 15197 band (±15 mg/dL below 100, ±15 % above). Once matched, the typed value is dropped from charts, stats and learning (the sensor reading replaces it), while the bolus calculation keeps a link to it. Timeline and calculation history show “Waiting for Dexcom data”, “Dexcom 141 (−9) · matches” or “… differs — check the value”.
+
+Prototype only: choosing Dexcom in setup (with sample history) holds back the last 3 h of sample readings; they arrive over time, or at once via Profile → *Simulate Apple Health sync*.
+
 ## Corrections
 
 - **Log one:** Home → **+ Insulin** → type **Correction** (the default), or use the Bolus tab with **0 g carbs** for a calculated correction (saved as a correction).

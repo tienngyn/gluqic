@@ -10,7 +10,8 @@ import { Screen } from '@/components/ui/Screen';
 import { ChipGroup } from '@/components/ui/SegmentedControl';
 import { IconButton } from '@/components/ui/SheetHeader';
 import { colors, spacing } from '@/constants/theme';
-import { startOfDay, useNow, useTimeline } from '@/hooks/useDerived';
+import { describeMatch } from '@/features/glucose/matchText';
+import { startOfDay, useManualMatches, useNow, useTimeline } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import type { TimelineEvent } from '@/types/models';
 import { formatDay } from '@/utils/format';
@@ -20,6 +21,8 @@ type Filter = 'all' | TimelineEvent['kind'];
 export default function Timeline() {
   const now = useNow();
   const unit = useAppStore((s) => s.user.glucoseUnit);
+  const source = useAppStore((s) => s.user.glucoseSource);
+  const matches = useManualMatches();
   const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState<Filter>('all');
   const day = useMemo(() => new Date(startOfDay(now).getTime() - offset * 86400000 + 12 * 3600000), [now, offset]);
@@ -53,7 +56,15 @@ export default function Timeline() {
       />
       <View style={styles.list}>
         {shown.length ? (
-          shown.map((e, i) => <TimelineRow key={e.id} event={e} unit={unit} last={i === shown.length - 1} />)
+          shown.map((e, i) => (
+            <TimelineRow
+              key={e.id}
+              event={e}
+              unit={unit}
+              last={i === shown.length - 1}
+              note={e.kind === 'glucose' && e.data.source === 'manual' ? describeMatch(matches.get(e.id), unit, source) : undefined}
+            />
+          ))
         ) : (
           <Text variant="callout" color="secondary">
             Nothing logged.

@@ -4,6 +4,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 
+import { effectiveReadings, matchManualReadings, type ManualMatch } from '@/domain/glucose/matching';
 import { computeStats, computeTrend, createReadingIndex, latestReading, SENSOR_FRESH_MIN } from '@/domain/glucose/stats';
 import { buildBolusEvents } from '@/domain/insights/bolusEvents';
 import { activeCorrectionSetpoint, activeSetpoint } from '@/domain/bolus/setpoint';
@@ -12,7 +13,7 @@ import { detectPatterns, detectSetpointOutcomes } from '@/domain/insights/patter
 import { activeInsulin } from '@/domain/insulin/iob';
 import { caloriesByMealType, dayTotals } from '@/domain/nutrition/totals';
 import { useAppStore } from '@/store/useAppStore';
-import type { CorrectionSetpoint, GlucoseTrend, Insight, Meal, MealType, RatioSetpoint, TimelineEvent } from '@/types/models';
+import type { CorrectionSetpoint, GlucoseReading, GlucoseTrend, Insight, Meal, MealType, RatioSetpoint, TimelineEvent } from '@/types/models';
 
 const DAY = 86400000;
 
@@ -28,8 +29,35 @@ export function useNow(intervalMs = 60000): Date {
 
 export const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-export function useCurrentGlucose(now: Date) {
+// One matching pass per version of the glucose list, shared by every hook.
+const matchCache = new WeakMap<GlucoseReading[], { matches: Map<string, ManualMatch>; effective: GlucoseReading[] }>();
+function matched(glucose: GlucoseReading[]) {
+  let hit = matchCache.get(glucose);
+  if (!hit) {
+    const matches = matchManualReadings(glucose);
+    hit = { matches, effective: effectiveReadings(glucose, matches) };
+    matchCache.set(glucose, hit);
+  }
+  return hit;
+}
+
+/**
+ * Glucose for charts, stats and learning: sensor readings plus typed values
+ * that no (delayed) sensor reading has replaced yet.
+ */
+export function useGlucose(): GlucoseReading[] {
   const glucose = useAppStore((s) => s.glucose);
+  return matched(glucose).effective;
+}
+
+/** How each typed value relates to the sensor data (matched / waiting / gap). */
+export function useManualMatches(): Map<string, ManualMatch> {
+  const glucose = useAppStore((s) => s.glucose);
+  return matched(glucose).matches;
+}
+
+export function useCurrentGlucose(now: Date) {
+  const glucose = useGlucose();
   return useMemo(() => {
     const latest = latestReading(glucose);
     const computed = computeTrend(glucose, now, 20);
@@ -43,7 +71,7 @@ export function useCurrentGlucose(now: Date) {
 }
 
 export function useGlucoseWindow(hours: number, now: Date) {
-  const glucose = useAppStore((s) => s.glucose);
+  const glucose = useGlucose();
   return useMemo(() => {
     const index = createReadingIndex(glucose);
     return index.between(new Date(now.getTime() - hours * 3600000), now);
@@ -51,7 +79,7 @@ export function useGlucoseWindow(hours: number, now: Date) {
 }
 
 export function useGlucoseStats(days: number, now: Date) {
-  const glucose = useAppStore((s) => s.glucose);
+  const glucose = useGlucose();
   const range = useAppStore((s) => s.range);
   return useMemo(() => {
     const index = createReadingIndex(glucose);
@@ -96,7 +124,7 @@ export function useDayNutrition(day: Date) {
 export function useBolusEvents() {
   const meals = useAppStore((s) => s.meals);
   const insulin = useAppStore((s) => s.insulin);
-  const glucose = useAppStore((s) => s.glucose);
+  const glucose = useGlucose();
   const activities = useAppStore((s) => s.activities);
   return useMemo(() => buildBolusEvents(meals, insulin, glucose, activities), [meals, insulin, glucose, activities]);
 }
@@ -111,7 +139,7 @@ export function useCorrectionAnalysis(days: number, now: Date) {
   const setpoint = useActiveCorrectionSetpoint();
   const insulin = useAppStore((s) => s.insulin);
   const meals = useAppStore((s) => s.meals);
-  const glucose = useAppStore((s) => s.glucose);
+  const glucose = useGlucose();
   const low = useAppStore((s) => s.range.low);
   return useMemo(() => {
     const from = setpoint ? new Date(setpoint.createdAt).getTime() : now.getTime() - days * DAY;
@@ -126,7 +154,7 @@ export function useInsights(days: number, now: Date): Insight[] {
   // Corrections need a longer look-back to collect enough clean samples.
   const corrections = useCorrectionAnalysis(Math.max(days, 90), now);
   const correctionSetpoint = useActiveCorrectionSetpoint();
-  const glucose = useAppStore((s) => s.glucose);
+  const glucose = useGlucose();
   const activities = useAppStore((s) => s.activities);
   const range = useAppStore((s) => s.range);
   const events = useBolusEvents();

@@ -258,6 +258,8 @@ export type BolusCalculation = {
   suggestedBolus: number;
   /** What the user actually confirmed/saved. */
   confirmedUnits?: number;
+  /** The typed-in glucose reading this calculation used, if any; matched later to sensor data. */
+  glucoseReadingId?: string;
   warnings: string[];
   calculationVersion: string;
   timestamp: string;

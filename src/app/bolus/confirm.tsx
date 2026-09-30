@@ -73,16 +73,22 @@ export default function ConfirmBolus() {
     if (invalid || overMax || !ack || taken == null) return;
     const at = new Date().toISOString();
     const { plannedUnits: _u, plannedSetpoint: _s, logGlucose, ...calc } = pending;
-    if (logGlucose) {
-      // A typed-in value is the best "before" reading until delayed sensor data arrives.
-      addGlucose({
-        value: pending.currentGlucose,
-        timestamp: at,
-        context: pending.carbs > 0 ? 'before-meal' : 'other',
-        source: 'manual',
-      });
-    }
-    const saved = saveBolus({ ...calc, confirmedUnits: taken, timestamp: at });
+    // A typed-in value is the best "before" reading until delayed sensor data
+    // arrives; it is matched to that data by time later.
+    const reading = logGlucose
+      ? addGlucose({
+          value: pending.currentGlucose,
+          timestamp: at,
+          context: pending.carbs > 0 ? 'before-meal' : 'other',
+          source: 'manual',
+        })
+      : undefined;
+    const saved = saveBolus({
+      ...calc,
+      glucoseReadingId: reading?.id ?? calc.glucoseReadingId,
+      confirmedUnits: taken,
+      timestamp: at,
+    });
     if (setpointOn && correctionProposal?.ok) {
       setCorrectionSetpoint({
         factor: correctionProposal.factor,

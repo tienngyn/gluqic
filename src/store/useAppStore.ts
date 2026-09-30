@@ -68,7 +68,15 @@ type State = {
   lastSavedBolusId: string | null;
   /** False until the user finishes setup or chooses to explore sample data. */
   onboarded: boolean;
+  /**
+   * Prototype only: sensor readings that "have not arrived yet", simulating
+   * Dexcom's ~3 h delay into Apple Health. Released by `releaseDelayedSensor`.
+   */
+  delayedGlucose: GlucoseReading[];
 };
+
+/** How late Dexcom data reaches Apple Health. */
+export const SENSOR_DELAY_MIN = 180;
 
 export type OnboardingResult = {
   name: string;
@@ -83,7 +91,7 @@ export type OnboardingResult = {
 };
 
 type Actions = {
-  addGlucose: (r: Omit<GlucoseReading, 'id' | 'userId'>) => void;
+  addGlucose: (r: Omit<GlucoseReading, 'id' | 'userId'>) => GlucoseReading;
   addInsulin: (d: Omit<InsulinDose, 'id' | 'userId'>) => void;
   addWeight: (w: Omit<WeightEntry, 'id' | 'userId'>) => void;
   addNote: (text: string, timestamp?: string) => void;
@@ -111,7 +119,18 @@ type Actions = {
   completeOnboarding: (r: OnboardingResult) => void;
   /** Skip setup and look around with the sample profile. */
   exploreSampleData: () => void;
+  /** Delivers delayed sensor readings that are old enough (or all of them). */
+  releaseDelayedSensor: (now: Date, all?: boolean) => void;
 };
+
+/** Moves sensor readings newer than the delay out of the visible list. */
+function holdBackRecentSensor(glucose: GlucoseReading[], now: Date) {
+  const cutoff = new Date(now.getTime() - SENSOR_DELAY_MIN * 60000).toISOString();
+  const visible: GlucoseReading[] = [];
+  const delayed: GlucoseReading[] = [];
+  for (const r of glucose) (r.source !== 'manual' && r.timestamp > cutoff ? delayed : visible).push(r);
+  return { glucose: visible, delayedGlucose: delayed };
+}
 
 function seedState(): State {
   const seed = generateSeedData(new Date());
@@ -136,6 +155,7 @@ function seedState(): State {
     pendingBolus: null,
     lastSavedBolusId: null,
     onboarded: false,
+    delayedGlucose: [],
   };
 }
 
@@ -145,7 +165,11 @@ const insertSorted = <T extends { timestamp: string }>(list: T[], item: T) => [.
 export const useAppStore = create<State & Actions>()((set, get) => ({
   ...seedState(),
 
-  addGlucose: (r) => set((s) => ({ glucose: insertSorted(s.glucose, { ...r, id: uid('g'), userId: USER_ID }) })),
+  addGlucose: (r) => {
+    const reading: GlucoseReading = { ...r, id: uid('g'), userId: USER_ID };
+    set((s) => ({ glucose: insertSorted(s.glucose, reading) }));
+    return reading;
+  },
 
   addInsulin: (d) => set((s) => ({ insulin: insertSorted(s.insulin, { ...d, id: uid('dose'), userId: USER_ID }) })),
 
@@ -342,8 +366,12 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
       const base = { user, insulinProfile, nutritionGoals: r.goals, onboarded: true, bolusDraft: null, pendingBolus: null };
       if (r.keepSampleData) {
         // Sample setpoints described the sample profile; the user's values replace them.
+        // With Dexcom, recent sample readings arrive late, just like the real thing.
+        const all = [...s.glucose, ...s.delayedGlucose].sort(byTimestamp);
+        const delay = r.glucoseSource === 'dexcom' ? holdBackRecentSensor(all, new Date()) : { glucose: all, delayedGlucose: [] };
         return {
           ...base,
+          ...delay,
           setpoints: s.setpoints.map((x) => (x.endedAt ? x : { ...x, endedAt: now, endReason: 'manual-edit' as const })),
           correctionSetpoints: [],
         };
@@ -351,6 +379,7 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
       return {
         ...base,
         glucose: [],
+        delayedGlucose: [],
         insulin: [],
         meals: [],
         activities: [],
@@ -364,6 +393,18 @@ export const useAppStore = create<State & Actions>()((set, get) => ({
     }),
 
   exploreSampleData: () => set({ onboarded: true }),
+
+  releaseDelayedSensor: (now, all = false) =>
+    set((s) => {
+      if (!s.delayedGlucose.length) return {};
+      const cutoff = all ? '9999' : new Date(now.getTime() - SENSOR_DELAY_MIN * 60000).toISOString();
+      const arrived = s.delayedGlucose.filter((r) => r.timestamp <= cutoff);
+      if (!arrived.length) return {};
+      return {
+        glucose: [...s.glucose, ...arrived].sort(byTimestamp),
+        delayedGlucose: s.delayedGlucose.filter((r) => r.timestamp > cutoff),
+      };
+    }),
 }));
 
 export const getState = () => useAppStore.getState();

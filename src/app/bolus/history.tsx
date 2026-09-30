@@ -5,12 +5,16 @@ import { Text } from '@/components/typography/Text';
 import { BackHeader } from '@/components/ui/BackHeader';
 import { Screen } from '@/components/ui/Screen';
 import { colors, spacing } from '@/constants/theme';
+import { describeMatch } from '@/features/glucose/matchText';
+import { useManualMatches } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import { formatDay, formatGlucose, formatTime, MEAL_LABEL } from '@/utils/format';
 
 export default function BolusHistory() {
   const history = useAppStore((s) => s.bolusHistory);
   const unit = useAppStore((s) => s.user.glucoseUnit);
+  const source = useAppStore((s) => s.user.glucoseSource);
+  const matches = useManualMatches();
 
   return (
     <Screen>
@@ -57,6 +61,16 @@ export default function BolusHistory() {
                   Took {taken.toFixed(1)} U vs suggested {c.suggestedBolus.toFixed(1)} U
                 </Text>
               ) : null}
+              {c.glucoseReadingId
+                ? (() => {
+                    const m = describeMatch(matches.get(c.glucoseReadingId), unit, source);
+                    return m ? (
+                      <Text variant="caption" color={m.color} style={styles.note}>
+                        Glucose typed in: {formatGlucose(c.currentGlucose, unit)} · {m.text}
+                      </Text>
+                    ) : null;
+                  })()
+                : null}
               <Text variant="caption" color="muted" style={styles.note}>
                 {c.calculationVersion}
               </Text>

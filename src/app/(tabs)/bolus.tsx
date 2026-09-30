@@ -166,6 +166,9 @@ export default function BolusScreen() {
       : null;
   const setpointReady = makeSetpoint && !!(proposal?.ok || correctionProposal?.ok);
 
+  // The calculation uses the latest reading as-is (fresh and unchanged).
+  const usesLatest = !!latest && fresh && values.glucose === String(toDisplayGlucose(latest.value, unit));
+
   const onReview = handleSubmit(() => {
     if (!result.ok || !ratio || take == null || takeOverMax) return;
     haptics.light();
@@ -186,7 +189,9 @@ export default function BolusScreen() {
       timestamp: new Date().toISOString(),
       plannedUnits: takeDiffers ? take : undefined,
       plannedSetpoint: takeDiffers && setpointReady,
-      logGlucose: !(latest && fresh && values.glucose === String(toDisplayGlucose(latest.value, unit))),
+      logGlucose: !usesLatest,
+      // Reusing a value typed in earlier: link that reading instead of adding another.
+      glucoseReadingId: usesLatest && latest?.source === 'manual' ? latest.id : undefined,
     });
     router.push('/bolus/confirm');
   });
@@ -239,8 +244,10 @@ export default function BolusScreen() {
               hint={
                 latest && fresh
                   ? field.value === String(toDisplayGlucose(latest.value, unit))
-                    ? `Sensor · ${relativeTime(latest.timestamp, now)} ${TREND_META[trend].arrow}`
-                    : 'Entered by you · saved as a reading'
+                    ? latest.source === 'manual'
+                      ? `Typed in ${relativeTime(latest.timestamp, now)}`
+                      : `Sensor · ${relativeTime(latest.timestamp, now)} ${TREND_META[trend].arrow}`
+                    : 'Entered by you · matched to sensor data when it arrives'
                   : latest
                     ? `Last sensor value is from ${relativeTime(latest.timestamp, now)}. Enter the current value from your CGM app.`
                     : 'Enter the current value from your CGM app or meter.'
