@@ -10,7 +10,7 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { colors, radius, spacing } from '@/constants/theme';
 import { classify } from '@/domain/glucose/stats';
-import { useCurrentGlucose, useGlucoseWindow } from '@/hooks/useDerived';
+import { useCurrentGlucose, useGlucoseWindow, useManualMatches } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import { formatGlucose, formatTime, relativeTime, toDisplayGlucose, TREND_META } from '@/utils/format';
 
@@ -34,10 +34,28 @@ export function GlucoseHero({ now }: { now: Date }) {
   const stale = !fresh;
   const readings = useGlucoseWindow(Number(span), now);
 
-  const data = useMemo(
-    () => readings.map((r) => ({ x: new Date(r.timestamp).getTime(), y: toDisplayGlucose(r.value, unit) })),
-    [readings, unit],
-  );
+  const allGlucose = useAppStore((s) => s.glucose);
+  const matches = useManualMatches();
+  // The line follows the sensor; typed values are drawn as separate points so
+  // a value that differs from the sensor stays visible instead of bending the line.
+  const data = useMemo(() => {
+    const sensor = readings.filter((r) => r.source !== 'manual');
+    const line = sensor.length ? sensor : readings;
+    return line.map((r) => ({ x: new Date(r.timestamp).getTime(), y: toDisplayGlucose(r.value, unit) }));
+  }, [readings, unit]);
+  const markers = useMemo(() => {
+    const from = now.getTime() - Number(span) * 3600000;
+    return allGlucose
+      .filter((r) => r.source === 'manual' && new Date(r.timestamp).getTime() >= from)
+      .map((r) => {
+        const m = matches.get(r.id);
+        return {
+          x: new Date(r.timestamp).getTime(),
+          y: toDisplayGlucose(r.value, unit),
+          color: m?.status === 'matched' && !m.agrees ? colors.orange : colors.text,
+        };
+      });
+  }, [allGlucose, matches, now, span, unit]);
   const xDomain = useMemo<[number, number]>(() => [now.getTime() - Number(span) * 3600000, now.getTime()], [now, span]);
   const xLabels = useMemo(() => {
     const h = Number(span);
@@ -122,6 +140,7 @@ export function GlucoseHero({ now }: { now: Date }) {
       <View style={styles.chart}>
         <LineChart
           data={data}
+          markers={markers}
           height={170}
           band={band}
           yDomain={yDomain}

@@ -12,6 +12,8 @@ export type LineChartProps = {
   data: Point[];
   /** Muted comparison series on the same x domain. */
   secondary?: Point[];
+  /** Individual points drawn over the line, e.g. values typed in by hand. */
+  markers?: (Point & { color?: string })[];
   height?: number;
   /** Subtle horizontal band, e.g. the target range. */
   band?: { low: number; high: number };
@@ -37,6 +39,7 @@ const PAD_BOTTOM = 8;
 export function LineChart({
   data,
   secondary,
+  markers,
   height = 180,
   band,
   yDomain,
@@ -62,7 +65,12 @@ export function LineChart({
     const primary = downsample(data, maxPts);
     const second = secondary?.length ? downsample(secondary, maxPts) : undefined;
 
-    const allY = [...primary.map((p) => p.y), ...(second?.map((p) => p.y) ?? []), ...(band ? [band.low, band.high] : [])];
+    const allY = [
+      ...primary.map((p) => p.y),
+      ...(second?.map((p) => p.y) ?? []),
+      ...(markers?.map((p) => p.y) ?? []),
+      ...(band ? [band.low, band.high] : []),
+    ];
     const [dataLo, dataHi] = extent(allY);
     const [yMin, yMax] = yDomain ?? [Math.max(0, dataLo - 15), dataHi + 15];
     const [xMin, xMax] = xDomain ?? extent(primary.map((p) => p.x));
@@ -82,12 +90,15 @@ export function LineChart({
       line,
       area,
       secondLine: second ? monotonePath(second.map((p) => ({ x: sx(p.x), y: sy(p.y) }))) : undefined,
+      markers: (markers ?? [])
+        .filter((p) => p.x >= xMin && p.x <= xMax)
+        .map((p) => ({ x: sx(p.x), y: sy(Math.min(yMax, Math.max(yMin, p.y))), color: p.color ?? colors.text })),
       band: band ? { y1: sy(band.high), y2: sy(band.low) } : undefined,
       grid: [0.25, 0.5, 0.75].map((f) => PAD_TOP + innerH * f),
       yTicks: (yLabels ?? []).map((v) => ({ v, y: sy(v) })),
       xTicks: (xLabels ?? []).map((t) => ({ ...t, px: sx(t.x) })),
     };
-  }, [width, data, secondary, band, yDomain, xDomain, height, yLabels, xLabels]);
+  }, [width, data, secondary, markers, band, yDomain, xDomain, height, yLabels, xLabels]);
 
   const handleTouch = (e: GestureResponderEvent) => {
     if (!model || !interactive) return;
@@ -153,6 +164,9 @@ export function LineChart({
               strokeLinejoin="round"
               opacity={sel ? 0.55 : 1}
             />
+            {model.markers.map((m, i) => (
+              <Circle key={`m${i}`} cx={m.x} cy={m.y} r={5.5} fill={colors.background} stroke={m.color} strokeWidth={2.25} />
+            ))}
             {sel ? (
               <>
                 <Line x1={sel.x} x2={sel.x} y1={0} y2={height} stroke="rgba(255,255,255,0.25)" strokeWidth={1} />

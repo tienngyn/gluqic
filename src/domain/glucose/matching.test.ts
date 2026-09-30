@@ -37,12 +37,20 @@ describe('matchManualReadings', () => {
     expect(matchManualReadings([...gap, typed(0, 150)]).get('m0')).toEqual({ status: 'no-sensor-data' });
   });
 
-  it('removes matched typed values from the readings used for stats', () => {
+  it('removes confirmed typed values from the readings used for stats', () => {
     const readings = [...dexcom, typed(0, 150), typed(200, 180, 'late')];
     const eff = effectiveReadings(readings, matchManualReadings(readings));
     expect(eff.some((r) => r.id === 'm0')).toBe(false);
     expect(eff.some((r) => r.id === 'late')).toBe(true);
     expect(eff).toHaveLength(dexcom.length + 1);
+  });
+
+  it('never drops a typed value that disagrees with the sensor', () => {
+    // Sensor says ~150, user typed 77: keep 77 visible.
+    const readings = [...dexcom, typed(0, 77)];
+    const matches = matchManualReadings(readings);
+    expect(matches.get('m0')).toMatchObject({ status: 'matched', agrees: false });
+    expect(effectiveReadings(readings, matches).some((r) => r.id === 'm0')).toBe(true);
   });
 });
 

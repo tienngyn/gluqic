@@ -14,7 +14,16 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { Screen, Section } from '@/components/ui/Screen';
 import { colors, radius, spacing } from '@/constants/theme';
 import { GlucoseHero } from '@/features/glucose/GlucoseHero';
-import { useActiveInsulin, useDayNutrition, useGlucoseStats, useInsights, useNow, useTimeline } from '@/hooks/useDerived';
+import { describeMatch } from '@/features/glucose/matchText';
+import {
+  useActiveInsulin,
+  useDayNutrition,
+  useGlucoseStats,
+  useInsights,
+  useManualMatches,
+  useNow,
+  useTimeline,
+} from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import { formatNumber, greeting } from '@/utils/format';
 
@@ -37,7 +46,12 @@ export default function HomeScreen() {
       insights[0],
     [insights],
   );
-  const recent = useMemo(() => timeline.filter((e) => e.kind !== 'glucose').slice(0, 4), [timeline]);
+  // Sensor readings are on the chart; values you typed in are things you did, so they show here.
+  const recent = useMemo(
+    () => timeline.filter((e) => e.kind !== 'glucose' || e.data.source === 'manual').slice(0, 4),
+    [timeline],
+  );
+  const matches = useManualMatches();
   const tirDelta = stats.timeInRange - previousStats.timeInRange;
 
   return (
@@ -117,7 +131,13 @@ export default function HomeScreen() {
           {recent.length ? (
             <View>
               {recent.map((e, i) => (
-                <TimelineRow key={e.id} event={e} unit={user.glucoseUnit} last={i === recent.length - 1} />
+                <TimelineRow
+                  key={e.id}
+                  event={e}
+                  unit={user.glucoseUnit}
+                  last={i === recent.length - 1}
+                  note={e.kind === 'glucose' ? describeMatch(matches.get(e.id), user.glucoseUnit, user.glucoseSource) : undefined}
+                />
               ))}
             </View>
           ) : (

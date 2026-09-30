@@ -85,11 +85,17 @@ export function matchManualReadings(
   return out;
 }
 
+/** True when a sensor reading confirms the typed value and can stand in for it. */
+export function isReplacedBySensor(match: ManualMatch | undefined): boolean {
+  return match?.status === 'matched' && match.agrees;
+}
+
 /**
  * Readings for charts, stats and learning: sensor readings plus typed
- * values that no sensor reading has replaced yet. Prevents counting the
- * same moment twice once delayed sensor data arrives.
+ * values. A typed value is dropped only when a sensor reading confirms it
+ * (so the same moment isn't counted twice). A typed value that disagrees
+ * with the sensor is kept — it is never silently replaced.
  */
 export function effectiveReadings(readings: GlucoseReading[], matches: Map<string, ManualMatch>): GlucoseReading[] {
-  return readings.filter((r) => !isManual(r) || matches.get(r.id)?.status !== 'matched');
+  return readings.filter((r) => !isManual(r) || !isReplacedBySensor(matches.get(r.id)));
 }
