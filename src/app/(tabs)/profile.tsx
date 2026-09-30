@@ -22,6 +22,7 @@ export default function ProfileScreen() {
   const latestWeight = useAppStore((s) => s.weights[s.weights.length - 1]);
   const updateProfile = useAppStore((s) => s.updateProfile);
   const resetDemoData = useAppStore((s) => s.resetDemoData);
+  const setpoints = useAppStore((s) => s.setpoints);
   const unit = user.glucoseUnit;
 
   return (
@@ -70,7 +71,9 @@ export default function ProfileScreen() {
               <ListRow
                 key={c.id}
                 label={c.label}
-                detail={`${formatMinuteOfDay(c.startMinute)}–${formatMinuteOfDay(c.endMinute)}`}
+                detail={`${formatMinuteOfDay(c.startMinute)}–${formatMinuteOfDay(c.endMinute)}${
+                  setpoints.some((sp) => sp.windowId === c.id && !sp.endedAt) ? ' · your setpoint' : ''
+                }`}
                 value={`1 U : ${c.gramsPerUnit} g`}
                 onPress={() => router.push('/profile/diabetes')}
                 last={i === profile.carbRatios.length - 1}

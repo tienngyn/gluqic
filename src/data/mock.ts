@@ -22,6 +22,7 @@ import type {
   MealItem,
   MealType,
   NutritionGoals,
+  RatioSetpoint,
   SavedMeal,
   UserProfile,
   WeightEntry,
@@ -81,11 +82,12 @@ export const mockInsulinProfile: InsulinProfile = {
   correctionFactor: 35,
   insulinDurationHours: 4.5,
   insulinPeakMinutes: 75,
-  maxBolus: 15,
+  maxBolus: 20,
   minGlucoseForBolus: 70,
   doseIncrement: 0.5,
   carbRatios: [
-    { id: 'cr_breakfast', label: 'Breakfast', mealType: 'breakfast', startMinute: 5 * 60, endMinute: 11 * 60, gramsPerUnit: 5 },
+    // 4.6 comes from the seeded setpoint below (was 5 before it).
+    { id: 'cr_breakfast', label: 'Breakfast', mealType: 'breakfast', startMinute: 5 * 60, endMinute: 11 * 60, gramsPerUnit: 4.6 },
     { id: 'cr_lunch', label: 'Lunch', mealType: 'lunch', startMinute: 11 * 60, endMinute: 16 * 60, gramsPerUnit: 7 },
     { id: 'cr_dinner', label: 'Dinner', mealType: 'dinner', startMinute: 16 * 60, endMinute: 22 * 60, gramsPerUnit: 6 },
     { id: 'cr_late', label: 'Late / snacks', mealType: 'snack', startMinute: 22 * 60, endMinute: 5 * 60, gramsPerUnit: 8 },
@@ -197,7 +199,26 @@ export type SeedData = {
   weights: WeightEntry[];
   savedMeals: SavedMeal[];
   bolusHistory: BolusCalculation[];
+  setpoints: RatioSetpoint[];
 };
+
+/** The demo user set a breakfast setpoint this many days ago. */
+const SETPOINT_DAYS_AGO = 14;
+const BREAKFAST_RATIO_BEFORE = 5;
+
+function seedSetpoint(today: Date): RatioSetpoint {
+  const createdAt = atMinute(new Date(today.getTime() - SETPOINT_DAYS_AGO * DAY), 7 * 60).toISOString();
+  return {
+    id: 'setpoint_breakfast_demo',
+    mealType: 'breakfast',
+    windowId: 'cr_breakfast',
+    gramsPerUnit: 4.6,
+    previousGramsPerUnit: BREAKFAST_RATIO_BEFORE,
+    createdAt,
+    // 72 g, glucose 124: suggested 14.5 U, took 16 U → (16 − 0.4) = 15.6 U → 72 ÷ 15.6 = 4.6 g/U
+    origin: { unitsTaken: 16, suggestedBolus: 14.5, carbs: 72, correctionBolus: 0.4, activeInsulin: 0 },
+  };
+}
 
 export function generateSeedData(now: Date = new Date()): SeedData {
   const glucose: GlucoseReading[] = [];
@@ -206,6 +227,8 @@ export function generateSeedData(now: Date = new Date()): SeedData {
   const activities: ActivityEntry[] = [];
   const today = startOfDay(now);
   const nowMs = now.getTime();
+  const setpoint = seedSetpoint(today);
+  const setpointMs = new Date(setpoint.createdAt).getTime();
   let noise = 0;
   let carryOver = 0; // glucose effects spilling past midnight
 
@@ -223,7 +246,7 @@ export function generateSeedData(now: Date = new Date()): SeedData {
     const carry = carryOver;
     effects.push((m) => carry * Math.exp(-m / 90));
 
-    const addMeal = (mealType: MealType, t: Template, minute: number, k: number, peak: number) => {
+    const addMeal = (mealType: MealType, t: Template, minute: number, k: number, peak: number, ratioOverride?: number) => {
       const at = atMinute(day, minute);
       if (at.getTime() > nowMs) return;
       const id = `meal_${dayKey(day)}_${mealType}`;
@@ -231,7 +254,7 @@ export function generateSeedData(now: Date = new Date()): SeedData {
       meals.push(meal);
 
       // Bolus a few minutes before eating, using the profile's ratios.
-      const ratio = mockInsulinProfile.carbRatios.find((c) => c.mealType === mealType)!.gramsPerUnit;
+      const ratio = ratioOverride ?? mockInsulinProfile.carbRatios.find((c) => c.mealType === mealType)!.gramsPerUnit;
       const units = roundDownToIncrement(meal.carbs / ratio + between(rng, -0.6, 0.6), 0.5);
       insulin.push({
         id: `dose_${id}`,
@@ -251,7 +274,12 @@ export function generateSeedData(now: Date = new Date()): SeedData {
     };
 
     // Breakfast runs high: the simulated body needs ~4 g/U, profile says 5.
-    addMeal('breakfast', pick(rng, BREAKFASTS), Math.round(between(rng, 450, 500)), 1.75, 70);
+    // Before the setpoint breakfast was dosed at 1:5 and often ran high. The
+    // extra insulin at 1:4.6 lowers the excursion by (1/4.6 − 1/5) × CF per gram.
+    const afterSetpoint = day.getTime() + 7 * 60 * MIN >= setpointMs;
+    const breakfastRatio = afterSetpoint ? setpoint.gramsPerUnit : BREAKFAST_RATIO_BEFORE;
+    const breakfastK = 1.75 - (1 / breakfastRatio - 1 / BREAKFAST_RATIO_BEFORE) * mockInsulinProfile.correctionFactor;
+    addMeal('breakfast', pick(rng, BREAKFASTS), Math.round(between(rng, 450, 500)), breakfastK, 70, breakfastRatio);
     addMeal('lunch', pick(rng, LUNCHES), Math.round(between(rng, 735, 795)), 0.55, 65);
     if (rng() < 0.55) addMeal('snack', pick(rng, SNACKS), Math.round(between(rng, 915, 960)), 0.7, 45);
 
@@ -348,6 +376,7 @@ export function generateSeedData(now: Date = new Date()): SeedData {
     weights: generateWeights(now),
     savedMeals: mockSavedMeals,
     bolusHistory,
+    setpoints: [setpoint],
   };
 }
 

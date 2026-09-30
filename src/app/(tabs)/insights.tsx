@@ -14,7 +14,7 @@ import { ChipGroup, SegmentedControl } from '@/components/ui/SegmentedControl';
 import { colors, radius, spacing } from '@/constants/theme';
 import { hourlyProfile } from '@/domain/glucose/stats';
 import { findSimilarMeals, signatureOf, summarizeOutcomes } from '@/domain/insights/similarMeals';
-import { useBolusEvents, useGlucoseStats, useInsights, useNow } from '@/hooks/useDerived';
+import { useActiveSetpoint, useBolusEvents, useGlucoseStats, useInsights, useNow } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import type { GlucoseReading, GlucoseUnit } from '@/types/models';
 import { formatGlucose, formatShortDate, MEAL_LABEL, toDisplayGlucose } from '@/utils/format';
@@ -49,6 +49,7 @@ export default function InsightsScreen() {
   const { readings, previousReadings, stats, previousStats } = useGlucoseStats(days, now);
   const insights = useInsights(Math.max(days, 14), now);
   const events = useBolusEvents();
+  const breakfastSetpoint = useActiveSetpoint('breakfast');
 
   // Wide buckets smooth meal spikes so the line reads as stability, not noise.
   const bucket = days <= 7 ? 8 * HOUR : days <= 30 ? 24 * HOUR : 72 * HOUR;
@@ -73,13 +74,15 @@ export default function InsightsScreen() {
   const similarBreakfast = useMemo(() => {
     const lastBreakfast = [...events].reverse().find((e) => e.mealType === 'breakfast');
     if (!lastBreakfast) return null;
-    const matches = findSimilarMeals(signatureOf(lastBreakfast), events, { threshold: 0.72, limit: 12, excludeId: lastBreakfast.id });
+    // With a setpoint, only meals since it reflect the ratio in use now.
+    const pool = breakfastSetpoint ? events.filter((e) => e.timestamp >= breakfastSetpoint.createdAt) : events;
+    const matches = findSimilarMeals(signatureOf(lastBreakfast), pool, { threshold: 0.72, limit: 12, excludeId: lastBreakfast.id });
     const summary = summarizeOutcomes(
       matches.map((m) => m.event),
       range,
     );
     return summary.withOutcome >= 4 ? { summary, meal: lastBreakfast } : null;
-  }, [events, range]);
+  }, [events, range, breakfastSetpoint]);
 
   const tirDelta = stats.timeInRange - previousStats.timeInRange;
   const trendLabel = stats.cv <= 36 ? 'Stable' : 'Variable';
@@ -193,6 +196,7 @@ export default function InsightsScreen() {
               </Text>
               <Text variant="label" color="muted">
                 Like {similarBreakfast.meal.mealName ?? 'your last breakfast'} · ~{Math.round(similarBreakfast.meal.carbs)} g carbs
+                {breakfastSetpoint ? ' · since your setpoint' : ''}
               </Text>
               <View style={styles.simStats}>
                 <View style={styles.simStat}>

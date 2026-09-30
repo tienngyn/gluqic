@@ -6,11 +6,12 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { computeStats, computeTrend, createReadingIndex, latestReading } from '@/domain/glucose/stats';
 import { buildBolusEvents } from '@/domain/insights/bolusEvents';
-import { detectPatterns } from '@/domain/insights/patterns';
+import { activeSetpoint } from '@/domain/bolus/setpoint';
+import { detectPatterns, detectSetpointOutcomes } from '@/domain/insights/patterns';
 import { activeInsulin } from '@/domain/insulin/iob';
 import { caloriesByMealType, dayTotals } from '@/domain/nutrition/totals';
 import { useAppStore } from '@/store/useAppStore';
-import type { GlucoseTrend, Insight, Meal, TimelineEvent } from '@/types/models';
+import type { GlucoseTrend, Insight, Meal, MealType, RatioSetpoint, TimelineEvent } from '@/types/models';
 
 const DAY = 86400000;
 
@@ -97,10 +98,19 @@ export function useBolusEvents() {
 }
 
 export function useInsights(days: number, now: Date): Insight[] {
+  const setpoints = useAppStore((s) => s.setpoints);
   const glucose = useAppStore((s) => s.glucose);
   const activities = useAppStore((s) => s.activities);
   const range = useAppStore((s) => s.range);
   const events = useBolusEvents();
+  // Setpoint cards must not be limited by the period filter.
+  const setpointById = useMemo(
+    () =>
+      new Map(
+        detectSetpointOutcomes({ events, readings: [], activities: [], range, now, setpoints }).map((i) => [i.id, i]),
+      ),
+    [events, range, now, setpoints],
+  );
   return useMemo(() => {
     const from = now.getTime() - days * DAY;
     const inWindow = <T extends { timestamp: string }>(xs: T[]) =>
@@ -112,8 +122,10 @@ export function useInsights(days: number, now: Date): Insight[] {
       range,
       now,
       minSamples: days <= 7 ? 5 : 6,
-    });
-  }, [events, glucose, activities, range, days, now]);
+      // Setpoint outcomes always look at every meal since the setpoint.
+      setpoints,
+    }).map((i) => (i.type === 'setpoint' ? (setpointById.get(i.id) ?? i) : i));
+  }, [events, glucose, activities, range, days, now, setpoints, setpointById]);
 }
 
 export function useTimeline(day: Date): TimelineEvent[] {
@@ -153,4 +165,9 @@ export function useTimeline(day: Date): TimelineEvent[] {
 export function useRecentMeals(limit = 3): Meal[] {
   const meals = useAppStore((s) => s.meals);
   return useMemo(() => meals.slice(-limit).reverse(), [meals, limit]);
+}
+
+export function useActiveSetpoint(mealType: MealType): RatioSetpoint | undefined {
+  const setpoints = useAppStore((s) => s.setpoints);
+  return useMemo(() => activeSetpoint(setpoints, mealType), [setpoints, mealType]);
 }

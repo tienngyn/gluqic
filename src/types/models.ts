@@ -162,6 +162,34 @@ export type InsulinProfile = {
   carbRatios: CarbRatioWindow[];
 };
 
+/**
+ * A carb ratio the user set explicitly by taking a different amount than
+ * suggested. It becomes the ratio for that meal type and the baseline that
+ * outcome tracking ("learning") compares against. Only the user creates,
+ * ends or resets a setpoint — gluciq never changes one on its own.
+ */
+export type RatioSetpoint = {
+  id: string;
+  mealType: MealType;
+  windowId: string;
+  /** grams per 1 U from now on */
+  gramsPerUnit: number;
+  /** the ratio before this setpoint, restored on reset */
+  previousGramsPerUnit: number;
+  createdAt: string;
+  /** How the ratio was derived, kept for audit. */
+  origin: {
+    calculationId?: string;
+    unitsTaken: number;
+    suggestedBolus: number;
+    carbs: number;
+    correctionBolus: number;
+    activeInsulin: number;
+  };
+  endedAt?: string;
+  endReason?: 'reset' | 'new-setpoint' | 'manual-edit';
+};
+
 export type NutritionGoals = {
   calories: number;
   protein: number;
@@ -235,6 +263,7 @@ export type InsightKind =
   | 'high-fat'
   | 'overnight'
   | 'trend'
+  | 'setpoint'
   | 'positive';
 
 export type Insight = {

@@ -43,6 +43,22 @@ Also: unified timeline (`/timeline`), weight tracker with 7D/30D/3M/1Y/All, BMI,
 - Nothing changes settings automatically. Insights describe outcomes and at most suggest *reviewing* a setting; `containsDoseInstruction()` filters any insight that reads like a dose instruction, and tests enforce it.
 - Active insulin uses the OpenAPS exponential curve (`src/domain/insulin/iob.ts`).
 
+## Setpoints
+
+When you take a different amount than suggested, the confirm screen offers **“Use as … setpoint”**. gluciq turns the dose into a carb ratio for that meal type:
+
+```
+mealUnits = unitsTaken − correction + activeInsulin      e.g. 16 − 0.4 + 0 = 15.6 U
+ratio     = carbs ÷ mealUnits                            e.g. 72 g ÷ 15.6 U = 1 U : 4.6 g
+```
+
+- From then on the calculator uses that ratio for the meal type (labelled “Your setpoint”, with **Reset** back to the previous ratio). The next 60 g breakfast is 60 ÷ 4.6 = 13.0 U.
+- “Learning” starts at the setpoint: a setpoint card compares meals since it with the meals before it (2 h outcomes), and similar-meal history only counts meals since the setpoint.
+- Only you create, replace or reset a setpoint. Editing that ratio in Diabetes settings ends it. Changes over ×2 either way are refused, over 25 % get a caution, and the max bolus still applies.
+- Logic: `src/domain/bolus/setpoint.ts`, `src/domain/insights/setpoints.ts` (with tests).
+
+The demo data includes a breakfast setpoint from 14 days ago (1 U : 5 g → 1 U : 4.6 g).
+
 ## Architecture
 
 ```

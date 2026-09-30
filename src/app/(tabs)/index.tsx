@@ -30,7 +30,11 @@ export default function HomeScreen() {
   const timeline = useTimeline(now);
 
   const featured = useMemo(
-    () => insights.find((i) => i.type === 'trend') ?? insights.find((i) => i.tone === 'positive') ?? insights[0],
+    () =>
+      insights.find((i) => i.type === 'setpoint') ??
+      insights.find((i) => i.type === 'trend') ??
+      insights.find((i) => i.tone === 'positive') ??
+      insights[0],
     [insights],
   );
   const recent = useMemo(() => timeline.filter((e) => e.kind !== 'glucose').slice(0, 4), [timeline]);

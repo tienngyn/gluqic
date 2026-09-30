@@ -18,10 +18,10 @@ import { calculateBolus, type PlannedActivity } from '@/domain/bolus/engine';
 import { findSimilarMeals, summarizeOutcomes } from '@/domain/insights/similarMeals';
 import { BolusResultCard } from '@/features/bolus/BolusResultCard';
 import { bolusFormSchema, mapEngineErrors, type BolusFormValues } from '@/features/bolus/form';
-import { useActiveInsulin, useBolusEvents, useCurrentGlucose, useNow } from '@/hooks/useDerived';
+import { useActiveInsulin, useActiveSetpoint, useBolusEvents, useCurrentGlucose, useNow } from '@/hooks/useDerived';
 import { useAppStore } from '@/store/useAppStore';
 import type { MealType } from '@/types/models';
-import { formatTime, fromDisplayGlucose, MEAL_LABEL, MEAL_TYPES, relativeTime, toDisplayGlucose, TREND_META } from '@/utils/format';
+import { formatDay, formatTime, fromDisplayGlucose, MEAL_LABEL, MEAL_TYPES, relativeTime, toDisplayGlucose, TREND_META } from '@/utils/format';
 import { haptics } from '@/utils/haptics';
 
 const ACTIVITY: { value: PlannedActivity; label: string }[] = [
@@ -73,6 +73,8 @@ export default function BolusScreen() {
   const values = useWatch({ control });
   const mealType = (values.mealType ?? 'breakfast') as MealType;
   const ratio = resolveCarbRatio(profile.carbRatios, { mealType, at: now });
+  const setpoint = useActiveSetpoint(mealType);
+  const resetSetpoint = useAppStore((s) => s.resetSetpoint);
 
   const result = useMemo(() => {
     const glucose = parseNumber(values.glucose ?? '');
@@ -105,14 +107,15 @@ export default function BolusScreen() {
         minuteOfDay: now.getHours() * 60 + now.getMinutes(),
         glucoseBefore: result.input.currentGlucose,
       },
-      events,
+      // Only meals since the setpoint reflect the ratio in use now.
+      setpoint ? events.filter((e) => e.timestamp >= setpoint.createdAt) : events,
       { threshold: 0.72, limit: 12 },
     );
     return summarizeOutcomes(
       matches.map((m) => m.event),
       range,
     );
-  }, [result, mealType, events, now, range]);
+  }, [result, mealType, events, now, range, setpoint]);
 
   const engineErrors = result.ok ? {} : mapEngineErrors(result.errors);
   const fieldError = (name: keyof typeof engineErrors) => {
@@ -226,9 +229,33 @@ export default function BolusScreen() {
             />
           )}
         />
-        <Text variant="label" color="muted" style={styles.ratio}>
-          {ratio ? `Carb ratio 1 U : ${ratio.gramsPerUnit} g · ${ratio.label}` : 'No carb ratio set for this meal.'}
-        </Text>
+        {setpoint && ratio ? (
+          <View style={styles.setpoint}>
+            <View style={styles.setpointText}>
+              <Text variant="label">
+                Your setpoint · 1 U : {ratio.gramsPerUnit} g
+              </Text>
+              <Text variant="caption" color="muted">
+                Set {formatDay(setpoint.createdAt, now).replace(/^(Today|Yesterday)$/, (d) => d.toLowerCase())} · was 1 U : {setpoint.previousGramsPerUnit} g
+              </Text>
+            </View>
+            <Text
+              variant="label"
+              color="secondary"
+              accessibilityRole="button"
+              onPress={() => {
+                haptics.light();
+                resetSetpoint(setpoint.id);
+              }}
+              style={styles.reset}>
+              Reset
+            </Text>
+          </View>
+        ) : (
+          <Text variant="label" color="muted" style={styles.ratio}>
+            {ratio ? `Carb ratio 1 U : ${ratio.gramsPerUnit} g · ${ratio.label}` : 'No carb ratio set for this meal.'}
+          </Text>
+        )}
       </Section>
 
       <View style={[styles.row, styles.sectionTight]}>
@@ -276,7 +303,13 @@ export default function BolusScreen() {
       </Section>
 
       <View style={styles.result}>
-        <BolusResultCard result={result.ok ? result : null} mealType={mealType} unit={unit} similar={similar} />
+        <BolusResultCard
+          result={result.ok ? result : null}
+          mealType={mealType}
+          unit={unit}
+          similar={similar}
+          setpointSince={setpoint ? formatDay(setpoint.createdAt, now) : undefined}
+        />
       </View>
 
       <Button
@@ -300,6 +333,20 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   sectionTight: { marginTop: spacing.xl },
   ratio: { marginTop: spacing.md },
+  setpoint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.md + 2,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  setpointText: { flex: 1, gap: 2 },
+  reset: { paddingVertical: 4, paddingLeft: 8 },
   result: { marginTop: spacing.xxxl },
   cta: { marginTop: spacing.xxxl },
   footnote: { marginTop: spacing.md, paddingHorizontal: spacing.xl },

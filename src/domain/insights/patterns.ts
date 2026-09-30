@@ -4,6 +4,7 @@
  * settings — see `containsDoseInstruction`, which every insight must pass.
  */
 import { computeStats, createReadingIndex, hourlyProfile } from '@/domain/glucose/stats';
+import { compareSetpoint, setpointInsight } from '@/domain/insights/setpoints';
 import { summarizeOutcomes } from '@/domain/insights/similarMeals';
 import type {
   ActivityEntry,
@@ -12,6 +13,7 @@ import type {
   GlucoseReading,
   Insight,
   MealType,
+  RatioSetpoint,
 } from '@/types/models';
 
 const MEAL_LABEL: Record<MealType, { one: string; many: string }> = {
@@ -44,11 +46,22 @@ export type PatternInput = {
   now: Date;
   /** Minimum samples before a meal pattern is reported. */
   minSamples?: number;
+  /** User-set carb-ratio setpoints; meal patterns start counting from the active one. */
+  setpoints?: RatioSetpoint[];
 };
 
-export function detectMealPatterns({ events, range, now, minSamples = 6 }: PatternInput): Insight[] {
+function activeFor(setpoints: RatioSetpoint[] | undefined, mealType: MealType): RatioSetpoint | undefined {
+  return setpoints
+    ?.filter((s) => s.mealType === mealType && !s.endedAt)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+}
+
+export function detectMealPatterns({ events, range, now, minSamples = 6, setpoints }: PatternInput): Insight[] {
   const out: Insight[] = [];
   (['breakfast', 'lunch', 'dinner'] as MealType[]).forEach((mealType) => {
+    // With an active setpoint, `detectSetpointOutcomes` reports this meal
+    // (counting only meals since the setpoint), so skip it here.
+    if (activeFor(setpoints, mealType)) return;
     const recent = events
       .filter((e) => e.mealType === mealType && e.glucose2h != null)
       .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
@@ -250,8 +263,16 @@ export function detectWeeklyTrend({ readings, range, now }: PatternInput): Insig
   ];
 }
 
+/** One insight per active setpoint: how meals have gone since it was set. */
+export function detectSetpointOutcomes({ events, range, now, setpoints }: PatternInput): Insight[] {
+  return (setpoints ?? [])
+    .filter((s) => !s.endedAt)
+    .map((s) => setpointInsight(compareSetpoint(s, events, range), 'mg/dL', now));
+}
+
 export function detectPatterns(input: PatternInput): Insight[] {
   const all = [
+    ...detectSetpointOutcomes(input),
     ...detectWeeklyTrend(input),
     ...detectMealPatterns(input),
     ...detectTimeOfDayPatterns(input),

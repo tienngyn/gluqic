@@ -19,11 +19,14 @@ export function BolusResultCard({
   mealType,
   unit,
   similar,
+  setpointSince,
 }: {
   result: Ok | null;
   mealType: MealType;
   unit: GlucoseUnit;
   similar?: OutcomeSummary;
+  /** Date label when the ratio comes from a user setpoint. */
+  setpointSince?: string;
 }) {
   if (!result) {
     return (
@@ -107,14 +110,15 @@ export function BolusResultCard({
       <View style={styles.why}>
         <Text variant="headline">Why this amount?</Text>
         <Text variant="callout" color="secondary" style={styles.whyBody}>
-          Your {mealLabel} ratio covers {input.carbRatio} g per unit, and each unit lowers glucose about{' '}
+          {setpointSince ? `Your ${mealLabel} setpoint from ${setpointSince.replace(/^(Today|Yesterday)$/, (d) => d.toLowerCase())}` : `Your ${mealLabel} ratio`} covers{' '}
+          {input.carbRatio} g per unit, and each unit lowers glucose about{' '}
           {formatGlucose(input.correctionFactor, unit)} {unit}. You are{' '}
-          {input.currentGlucose >= input.targetGlucose ? 'above' : 'below'} your target of{' '}
+          {input.currentGlucose === input.targetGlucose ? 'at' : input.currentGlucose > input.targetGlucose ? 'above' : 'below'} your target of{' '}
           {formatGlucose(input.targetGlucose, unit)} {unit}, and {input.activeInsulin.toFixed(1)} U is still active.
         </Text>
         {similar && similar.withOutcome >= 3 ? (
           <Text variant="callout" color="secondary" style={styles.whyBody}>
-            {similar.count} similar {mealLabel}s were analyzed. Two hours later glucose was in range after{' '}
+            {similar.count} similar {mealLabel}s{setpointSince ? ' since your setpoint' : ''} were analyzed. Two hours later glucose was in range after{' '}
             {similar.inRangeAt2h} and above range after {similar.aboveAt2h}. This history is shown for context — it does
             not change the suggestion.
           </Text>

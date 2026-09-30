@@ -22,6 +22,7 @@ import type {
   MealType,
   NoteEntry,
   NutritionGoals,
+  RatioSetpoint,
   SavedMeal,
   UserProfile,
   WeightEntry,
@@ -49,6 +50,7 @@ type State = {
   savedMeals: SavedMeal[];
   customFoods: FoodItem[];
   bolusHistory: BolusCalculation[];
+  setpoints: RatioSetpoint[];
   bolusDraft: BolusDraft;
   pendingBolus: PendingBolus;
   /** Set when the user confirms a calculation in this session. */
@@ -66,6 +68,10 @@ type Actions = {
   saveBolus: (calc: Omit<BolusCalculation, 'id'>) => BolusCalculation;
   setBolusDraft: (d: BolusDraft) => void;
   setPendingBolus: (p: PendingBolus) => void;
+  /** Explicit user action: make this ratio the setpoint for its meal type. */
+  setRatioSetpoint: (sp: Omit<RatioSetpoint, 'id' | 'createdAt' | 'previousGramsPerUnit'>) => RatioSetpoint | null;
+  /** Ends the setpoint and restores the ratio that was in place before it. */
+  resetSetpoint: (id: string) => void;
   updateProfile: (p: Partial<UserProfile>) => void;
   updateInsulinProfile: (p: Partial<Omit<InsulinProfile, 'carbRatios'>>) => void;
   updateCarbRatio: (id: string, patch: Partial<CarbRatioWindow>) => void;
@@ -91,6 +97,7 @@ function seedState(): State {
     savedMeals: seed.savedMeals,
     customFoods: [],
     bolusHistory: seed.bolusHistory,
+    setpoints: seed.setpoints,
     bolusDraft: null,
     pendingBolus: null,
     lastSavedBolusId: null,
@@ -100,7 +107,7 @@ function seedState(): State {
 const byTimestamp = <T extends { timestamp: string }>(a: T, b: T) => a.timestamp.localeCompare(b.timestamp);
 const insertSorted = <T extends { timestamp: string }>(list: T[], item: T) => [...list, item].sort(byTimestamp);
 
-export const useAppStore = create<State & Actions>()((set) => ({
+export const useAppStore = create<State & Actions>()((set, get) => ({
   ...seedState(),
 
   addGlucose: (r) => set((s) => ({ glucose: insertSorted(s.glucose, { ...r, id: uid('g'), userId: USER_ID }) })),
@@ -170,6 +177,49 @@ export const useAppStore = create<State & Actions>()((set) => ({
 
   setPendingBolus: (pendingBolus) => set({ pendingBolus }),
 
+  setRatioSetpoint: (input) => {
+    const window = get().insulinProfile.carbRatios.find((c) => c.id === input.windowId);
+    if (!window) return null;
+    const now = new Date().toISOString();
+    const setpoint: RatioSetpoint = {
+      ...input,
+      id: uid('setpoint'),
+      createdAt: now,
+      previousGramsPerUnit: window.gramsPerUnit,
+    };
+    set((s) => ({
+      setpoints: [
+        ...s.setpoints.map((x) =>
+          x.windowId === input.windowId && !x.endedAt ? { ...x, endedAt: now, endReason: 'new-setpoint' as const } : x,
+        ),
+        setpoint,
+      ],
+      insulinProfile: {
+        ...s.insulinProfile,
+        carbRatios: s.insulinProfile.carbRatios.map((c) =>
+          c.id === input.windowId ? { ...c, gramsPerUnit: input.gramsPerUnit } : c,
+        ),
+      },
+    }));
+    return setpoint;
+  },
+
+  resetSetpoint: (id) =>
+    set((s) => {
+      const sp = s.setpoints.find((x) => x.id === id);
+      if (!sp || sp.endedAt) return {};
+      const now = new Date().toISOString();
+      return {
+        setpoints: s.setpoints.map((x) => (x.id === id ? { ...x, endedAt: now, endReason: 'reset' as const } : x)),
+        insulinProfile: {
+          ...s.insulinProfile,
+          carbRatios: s.insulinProfile.carbRatios.map((c) =>
+            c.id === sp.windowId ? { ...c, gramsPerUnit: sp.previousGramsPerUnit } : c,
+          ),
+        },
+      };
+    }),
+
   updateProfile: (p) => set((s) => ({ user: { ...s.user, ...p } })),
 
   // Settings change only through explicit user edits — never automatically.
@@ -177,6 +227,16 @@ export const useAppStore = create<State & Actions>()((set) => ({
 
   updateCarbRatio: (id, patch) =>
     set((s) => ({
+      // Editing a ratio by hand ends any setpoint on it: the new value is the baseline now.
+      setpoints:
+        patch.gramsPerUnit != null &&
+        patch.gramsPerUnit !== s.insulinProfile.carbRatios.find((c) => c.id === id)?.gramsPerUnit
+          ? s.setpoints.map((x) =>
+              x.windowId === id && !x.endedAt
+                ? { ...x, endedAt: new Date().toISOString(), endReason: 'manual-edit' as const }
+                : x,
+            )
+          : s.setpoints,
       insulinProfile: {
         ...s.insulinProfile,
         carbRatios: s.insulinProfile.carbRatios.map((c) => (c.id === id ? { ...c, ...patch } : c)),

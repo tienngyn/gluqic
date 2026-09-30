@@ -43,10 +43,13 @@ describe('seed data', () => {
       activities: seed.activities,
       range: DEFAULT_RANGE,
       now,
+      setpoints: seed.setpoints,
     });
     if (process.env.SEED_DEBUG) console.log(insights.map((i) => `${i.title}: ${i.body}`));
     const types = insights.map((i) => i.type);
-    expect(types).toEqual(expect.arrayContaining(['meal-pattern', 'exercise']));
+    expect(types).toEqual(expect.arrayContaining(['setpoint', 'exercise']));
+    const sp = insights.find((i) => i.type === 'setpoint');
+    expect(sp?.tone).toBe('positive');
     for (const i of insights) expect(containsDoseInstruction(`${i.body} ${i.suggestion ?? ''}`)).toBe(false);
   });
 });
