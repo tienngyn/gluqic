@@ -1,6 +1,6 @@
 # gluciq mit Google Sheets – Einrichtung
 
-Dreimal hinten aufs iPhone tippen → Blutzucker, Kohlenhydrate, NovoRapid eingeben → landet in der Tabelle **„gluciq – Einträge“** in deinem Google Drive. Claude liest die Tabelle und wertet sie aus.
+Dreimal hinten aufs iPhone tippen → Blutzucker, Kohlenhydrate, NovoRapid eingeben (später: Vorschlag bekommen) → landet in der Tabelle **„gluciq – Einträge“** in deinem Google Drive. Claude liest die Tabelle und wertet sie aus.
 
 Du brauchst einmal ca. 15 Minuten. Schritt 1 geht am besten am Computer.
 
@@ -26,33 +26,36 @@ Test: Öffne die URL im Browser. Dort sollte „gluciq läuft“ stehen.
 
 ---
 
-## 2. Kurzbefehl „Eintragen“ (iPhone, ca. 5 min)
+## 2. Kurzbefehl „Eintragen“ (iPhone, ca. 10 min)
 
-App **Kurzbefehle** → **+** → Name: **Eintragen**. Füge diese Aktionen in dieser Reihenfolge hinzu:
+Ein Kurzbefehl für beide Phasen: Solange dein System noch nicht steht, fragt er nach den Einheiten. Sobald es freigeschaltet ist (siehe 5.), zeigt er den Vorschlag.
 
-1. **Nach Eingabe fragen** – Eingabetyp: *Zahl*, Frage: `Blutzucker (mg/dL)`
-2. **Variable festlegen** – Name: `BZ` (Eingabe: *Bereitgestellte Eingabe*)
-3. **Nach Eingabe fragen** – Eingabetyp: *Zahl*, Frage: `Kohlenhydrate (g)`
-4. **Variable festlegen** – Name: `KH`
-5. **Aus Menü auswählen** – Frage: `Kohlenhydrate?`, Optionen: `Geschätzt` und `Gewogen`
+App **Kurzbefehle** → **+** → Name: **Eintragen**. Aktionen in dieser Reihenfolge:
+
+1. **Nach Eingabe fragen** – *Zahl*, Frage: `Blutzucker (mg/dL)` → **Variable festlegen** `BZ`
+2. **Nach Eingabe fragen** – *Zahl*, Frage: `Kohlenhydrate (g)` → **Variable festlegen** `KH`
+3. **Aus Menü auswählen** – Frage: `Kohlenhydrate?`, Optionen `Geschätzt` / `Gewogen`
    - unter *Geschätzt*: **Text** `Geschätzt` → **Variable festlegen** `Art`
    - unter *Gewogen*: **Text** `Gewogen` → **Variable festlegen** `Art`
-6. **Nach Eingabe fragen** – Eingabetyp: *Zahl*, **Dezimalzahlen erlauben** an, Frage: `NovoRapid (IE)`
-7. **Variable festlegen** – Name: `IE`
-8. **Inhalte von URL abrufen**
-   - URL: deine Web-App-URL
-   - Methode: **POST**
-   - Anfragetext: **JSON**, Felder (alle Typ *Text*):
-     - `token` → dein geheimer Code (steht in Code.gs bei `TOKEN`)
-     - `bg` → Variable `BZ`
-     - `carbs` → Variable `KH`
-     - `weighed` → Variable `Art`
-     - `units` → Variable `IE`
-9. **Mitteilung anzeigen** – Text: *Inhalte der URL*
+4. **Inhalte von URL abrufen** – URL: deine Web-App-URL, Methode **POST**, Anfragetext **JSON**:
+   `token` → dein Code · `action` → `suggest` · `bg` → `BZ` · `carbs` → `KH`
+5. **Wörterbuchwert abrufen** – Schlüssel `text` aus *Inhalte der URL* → **Variable festlegen** `Info`
+6. **Wörterbuchwert abrufen** – Schlüssel `units` aus *Inhalte der URL* → **Variable festlegen** `Vorschlag`
+7. **Wörterbuchwert abrufen** – Schlüssel `enabled` aus *Inhalte der URL*
+8. **Wenn** *Wörterbuchwert* **ist** `ja`
+   - **Aus Menü auswählen** – Frage: `Info`, Optionen `Übernehmen` / `Andere Menge`
+     - unter *Übernehmen*: **Variable festlegen** `IE` = `Vorschlag`
+     - unter *Andere Menge*: **Nach Eingabe fragen** – *Zahl*, Dezimalzahlen an, Frage `Wie viel hast du gespritzt? (IE)`, Standard `Vorschlag` → **Variable festlegen** `IE`
+   - **Sonst**
+     - **Nach Eingabe fragen** – *Zahl*, Dezimalzahlen an, Frage: `Info` → **Variable festlegen** `IE`
+   - **Ende Wenn**
+9. **Inhalte von URL abrufen** – URL: deine Web-App-URL, Methode **POST**, Anfragetext **JSON**:
+   `token` → dein Code · `bg` → `BZ` · `carbs` → `KH` · `weighed` → `Art` · `units` → `IE` · `suggested` → `Vorschlag`
+10. **Mitteilung anzeigen** – *Inhalte der URL*
 
 **Leere Felder:** Was du nicht hast, lässt du leer oder gibst `0` ein. Nur den Blutzucker eintragen (z. B. 3 h nach dem Essen) geht genauso. NovoRapid ohne Kohlenhydrate zählt als Korrektur.
 
-Testen: Kurzbefehl einmal ausführen → oben erscheint „Gespeichert: …“, und in der Tabelle steht eine neue Zeile.
+Testen: Kurzbefehl einmal ausführen → oben erscheint „Gespeichert: …“, und in der Tabelle steht eine neue Zeile. Ab dann gibt es auch den Tab **„Mein System“**.
 
 ---
 
@@ -79,6 +82,35 @@ Kurzbefehle → **Automation** → **+** → **Tageszeit** → **7:00**, täglic
    - `data` → *Kombinierter Text*
 
 Die Werte landen im Tab **„Dexcom“**. Doppelte Werte werden übersprungen. Die Health-App sollte Blutzucker in **mg/dL** anzeigen.
+
+---
+
+## 5. Phase 2: Vorschlag freischalten (später)
+
+Wenn Claude meldet, dass dein System steht, besprichst du die Werte mit deinem Diabetologen. Dann trägst du im Tab **„Mein System“** ein:
+
+| Einstellung | Beispiel |
+| --- | --- |
+| Vorschlag aktiv | `ja` (vorher `nein` – dann wird nichts vorgeschlagen) |
+| Zielwert (mg/dL) | 110 |
+| KE-Faktor morgens / mittags / abends / spät (g pro IE) | 8 = 1 IE für 8 g. Leer = zu dieser Zeit kein Vorschlag |
+| Korrekturfaktor (mg/dL pro IE) | 40 = 1 IE senkt um 40 |
+| Höchstdosis pro Spritze (IE) | mehr wird nie vorgeschlagen |
+| Kein Insulin unter (mg/dL) | 70 |
+| Wirkdauer NovoRapid (Stunden) | 4,5 |
+
+Dann zeigt der Kurzbefehl nach Blutzucker und Kohlenhydraten z. B.:
+
+> Vorschlag: 6,5 IE
+> Essen: 45 g ÷ 8 = 5,6 IE
+> Korrektur: (150 − 110) ÷ 40 = +1 IE
+
+Du tippst **Übernehmen** oder gibst ein, was du wirklich gespritzt hast. Das ist wichtig: Nur so weiß gluciq beim nächsten Mal, wie viel Insulin noch wirkt, und Claude kann weiter auswerten, ob dein System passt.
+
+**Die Formel** (rechnet nur das Skript, nicht Claude):
+Essen = Kohlenhydrate ÷ KE-Faktor der Tageszeit · Korrektur = (Blutzucker − Zielwert) ÷ Korrekturfaktor · Vorschlag = Essen + Korrektur − noch aktives NovoRapid (aus deinen Einträgen der letzten 4,5 h). Danach: unter 70 kein Insulin · nie unter 0 · auf 0,5 IE abgerundet · höchstens die Höchstdosis.
+
+Ändert sich später etwas, schlägt Claude neue Werte vor. Übernommen wird ein Wert erst, wenn du ihn selbst in „Mein System“ einträgst.
 
 ---
 
