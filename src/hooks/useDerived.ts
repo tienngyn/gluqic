@@ -13,6 +13,7 @@ import { suggestCorrectionFactor, suggestRatio, type SettingSuggestion } from '@
 import { detectPatterns, detectSetpointOutcomes } from '@/domain/insights/patterns';
 import { activeInsulin } from '@/domain/insulin/iob';
 import { caloriesByMealType, dayTotals } from '@/domain/nutrition/totals';
+import { analyzeSystem, type SystemAnalysis } from '@/domain/system/analyze';
 import { useAppStore } from '@/store/useAppStore';
 import type { CorrectionSetpoint, GlucoseReading, GlucoseTrend, Insight, Meal, MealType, RatioSetpoint, TimelineEvent } from '@/types/models';
 
@@ -266,4 +267,12 @@ export function useRecentMeals(limit = 3): Meal[] {
 export function useActiveSetpoint(mealType: MealType): RatioSetpoint | undefined {
   const setpoints = useAppStore((s) => s.setpoints);
   return useMemo(() => activeSetpoint(setpoints, mealType), [setpoints, mealType]);
+}
+
+/** "Dein System": ratios per time of day, correction effect, basal check. */
+export function useSystemAnalysis(now: Date): SystemAnalysis {
+  const meals = useAppStore((s) => s.meals);
+  const insulin = useAppStore((s) => s.insulin);
+  const glucose = useGlucose();
+  return useMemo(() => analyzeSystem({ meals, doses: insulin, readings: glucose, now }), [meals, insulin, glucose, now]);
 }

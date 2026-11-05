@@ -15,7 +15,8 @@ import { useCurrentGlucose, useNow } from '@/hooks/useDerived';
 import { SHARE_REGIONS, shareSupported, type ShareRegion } from '@/services/dexcomShare';
 import { useAppStore } from '@/store/useAppStore';
 import { useDexcomShare } from '@/store/useDexcomShare';
-import { formatGlucose, relativeTime } from '@/utils/format';
+import { formatGlucose } from '@/utils/format';
+import { dayText, timeText } from '@/utils/de';
 import { haptics } from '@/utils/haptics';
 
 export default function DexcomShareScreen() {
@@ -44,47 +45,47 @@ export default function DexcomShareScreen() {
     <Screen
       footer={
         live ? (
-          <Button label="Disconnect" variant="secondary" onPress={() => void share.disconnect()} />
+          <Button label="Trennen" variant="secondary" onPress={() => void share.disconnect()} />
         ) : (
-          <Button label={share.status === 'connecting' ? 'Connecting…' : 'Connect'} onPress={() => void onConnect()} disabled={!canConnect} />
+          <Button label={share.status === 'connecting' ? 'Verbinde …' : 'Verbinden'} onPress={() => void onConnect()} disabled={!canConnect} />
         )
       }>
       <BackHeader />
       <Text variant="title">Dexcom Share</Text>
       <Text variant="callout" color="secondary" style={styles.lead}>
-        Live glucose every 5 minutes, straight from Dexcom — no typing, no 3-hour Apple Health delay.
+        Deine Sensorwerte alle 5 Minuten direkt von Dexcom. Damit wertet gluciq deine Mahlzeiten automatisch aus.
       </Text>
 
       {live ? (
         <Card padding={0}>
           <View style={styles.inset}>
-            <ListRow label="Status" value={share.status === 'demo' ? 'Demo (simulated)' : 'Connected'} />
-            <ListRow label="Account" value={share.username} />
+            <ListRow label="Status" value={share.status === 'demo' ? 'Demo (simuliert)' : 'Verbunden'} />
+            <ListRow label="Konto" value={share.username} />
             <ListRow
-              label="Latest value"
-              value={latest ? `${formatGlucose(latest.value, unit)} ${unit} · ${relativeTime(latest.timestamp, now)}` : '—'}
+              label="Letzter Wert"
+              value={latest ? `${formatGlucose(latest.value, unit)} ${unit} · ${ago(latest.timestamp, now)}` : '—'}
             />
-            <ListRow label="Last sync" value={share.lastSyncAt ? relativeTime(share.lastSyncAt, now) : '—'} last />
+            <ListRow label="Zuletzt geladen" value={share.lastSyncAt ? ago(share.lastSyncAt, now) : '—'} last />
           </View>
         </Card>
       ) : (
         <View style={styles.stack}>
           <Text variant="label" color="secondary">
-            Dexcom account region
+            Region deines Dexcom-Kontos
           </Text>
           <ChipGroup<ShareRegion>
             value={region}
             onChange={setRegion}
             options={(Object.keys(SHARE_REGIONS) as ShareRegion[]).map((r) => ({ value: r, label: SHARE_REGIONS[r].label }))}
           />
-          <TextField label="Dexcom username, email or phone" value={username} onChangeText={setUsername} autoComplete="username" />
-          <TextField label="Dexcom password" value={password} onChangeText={setPassword} secure autoComplete="password" />
+          <TextField label="Dexcom-Benutzername, E-Mail oder Telefon" value={username} onChangeText={setUsername} autoComplete="username" />
+          <TextField label="Dexcom-Passwort" value={password} onChangeText={setPassword} secure autoComplete="password" />
         </View>
       )}
 
       {share.error ? (
         <View style={styles.banner}>
-          <Banner tone={share.status === 'error' ? 'critical' : 'caution'} message={share.error} />
+          <Banner tone={share.status === 'error' ? 'critical' : 'caution'} message={errorText(share.errorCode, share.error)} />
         </View>
       ) : null}
 
@@ -92,29 +93,47 @@ export default function DexcomShareScreen() {
         <View style={styles.banner}>
           <Banner
             tone="info"
-            title="In the browser"
-            message="Live Share works in the gluciq iPhone app. Here you can try how it feels with simulated values."
+            title="Im Browser"
+            message="Dexcom Share funktioniert in der iPhone-App. Hier kannst du es mit simulierten Werten ausprobieren."
           />
-          <Button label="Try with simulated values" variant="secondary" size="m" style={styles.demo} onPress={share.startDemo} />
+          <Button label="Mit simulierten Werten testen" variant="secondary" size="m" style={styles.demo} onPress={share.startDemo} />
         </View>
       ) : null}
 
-      <Section title="Before you connect">
+      <Section title="Bevor du verbindest">
         <View style={styles.notes}>
           <Text variant="label" color="secondary">
-            • In the Dexcom app, turn on Share and invite at least one follower (it can be yourself on another account).
+            • Schalte in der Dexcom-App „Teilen“ ein und lade mindestens einen Follower ein (das kannst auch du mit einer zweiten E-Mail sein).
           </Text>
           <Text variant="label" color="secondary">
-            • Your password is stored only in this phone’s keychain and sent only to Dexcom’s server.
+            • Dein Passwort wird nur im Schlüsselbund dieses iPhones gespeichert und nur an Dexcom gesendet.
           </Text>
           <Text variant="label" color="secondary">
-            • Share is not an official Dexcom API for apps like this one. Dexcom can change it at any time; gluciq then falls back to
-            typed values and Apple Health.
+            • Share ist keine offizielle Schnittstelle für Apps wie diese. Dexcom kann sie jederzeit ändern – dann trägst du den Wert
+            nach ca. 3 h einfach selbst ein.
           </Text>
         </View>
       </Section>
     </Screen>
   );
+}
+
+function ago(iso: string, now: Date): string {
+  const mins = Math.round((now.getTime() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'gerade eben';
+  if (mins < 60) return `vor ${mins} min`;
+  return `${dayText(iso, now)}, ${timeText(iso)}`;
+}
+
+const ERRORS: Record<string, string> = {
+  auth: 'Dexcom hat Benutzername oder Passwort nicht akzeptiert.',
+  network: 'Dexcom ist nicht erreichbar. Prüf deine Verbindung.',
+  session: 'Die Verbindung ist abgelaufen. Bitte neu verbinden.',
+  blocked: 'Dexcom Share funktioniert nur in der iPhone-App, nicht im Browser.',
+};
+
+function errorText(code: string | undefined, fallback: string): string {
+  return (code && ERRORS[code]) || fallback;
 }
 
 const styles = StyleSheet.create({

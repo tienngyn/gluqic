@@ -16,7 +16,8 @@ export function FloatingTabBar({ children, style, ...rest }: TabListProps) {
     <View
       {...rest}
       pointerEvents="box-none"
-      style={[styles.container, { paddingBottom: Math.max(insets.bottom - 6, spacing.lg) }, style]}>
+      // TabList passes a row layout; the container keeps the pill centred.
+      style={[style, styles.container, { paddingBottom: Math.max(insets.bottom - 6, spacing.lg) }]}>
       <View style={styles.pill}>
         {Platform.OS === 'web' ? (
           <View style={[StyleSheet.absoluteFill, styles.webGlass]} />
@@ -104,6 +105,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    flexDirection: 'column',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
   },
@@ -112,7 +114,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 68,
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 280,
+    alignSelf: 'center',
     borderRadius: radius.pill,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
@@ -126,8 +129,8 @@ const styles = StyleSheet.create({
   },
   webGlass: {
     backgroundColor: 'rgba(20,20,20,0.7)',
-    // @ts-expect-error web-only
-    backdropFilter: 'blur(24px) saturate(160%)',
+    // Web only; not in every version of the React Native style types.
+    ...({ backdropFilter: 'blur(24px) saturate(160%)' } as object),
   },
   tint: { backgroundColor: 'rgba(17,17,17,0.55)' },
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, height: '100%' },

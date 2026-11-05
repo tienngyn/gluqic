@@ -16,12 +16,12 @@ export type ShareRegion = 'ous' | 'us' | 'jp';
 
 export const SHARE_REGIONS: Record<ShareRegion, { label: string; baseUrl: string; applicationId: string }> = {
   ous: {
-    label: 'Outside the US',
+    label: 'Außerhalb der USA',
     baseUrl: 'https://shareous1.dexcom.com/ShareWebServices/Services',
     applicationId: 'd89443d2-327c-4a6f-89e5-496bbb0317db',
   },
   us: {
-    label: 'United States',
+    label: 'USA',
     baseUrl: 'https://share2.dexcom.com/ShareWebServices/Services',
     applicationId: 'd89443d2-327c-4a6f-89e5-496bbb0317db',
   },

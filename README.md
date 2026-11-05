@@ -20,98 +20,52 @@ npm run typecheck  # tsc --noEmit
 npm run lint       # eslint (expo config)
 ```
 
-The app starts with 90 days of deterministic, realistic sample data (glucose, meals, doses, workouts, 13 months of weight). Profile → *Reset demo data* regenerates it.
+On first start you can begin empty or look around with 90 days of deterministic sample data.
 
-## What's in the first build
+## Die App (reduziert)
 
-| Tab | What it does |
+gluciq löst ein Problem: **Spritzen nach Gefühl, ohne System.** Die App hat zwei Tabs, auf Deutsch:
+
+| Tab | Was er macht |
 | --- | --- |
-| **Home** | Current glucose + trend, scrubbable 3–24 h chart with haptics, active insulin, 24 h time in range, today's calories/macros, quick actions (+ Glucose / Meal / Insulin / Weight), featured insight, recent timeline. |
-| **Food** | Daily energy ring, macros, fiber/sugar, meals by type, one-tap saved meals, day navigation. Add food via search, barcode scan (Expo Camera, with manual/sample fallback), custom food; portion picker can send carbs straight to Bolus. |
-| **Bolus** | React Hook Form + Zod form, live deterministic calculation, full breakdown with formulas, safety warnings, "Why this amount?", similar-meal context (informational only), explicit confirmation before saving, calculation history. |
-| **Insights** | 7/30/90/custom periods; stability chart vs previous period; TIR, average, GMI, high/low events, range bar, average-day profile, similar-meal analysis and pattern cards. |
-| **Profile** | Glucose unit (mg/dL ↔ mmol/L everywhere), target, correction factor, insulin duration, max bolus, low-glucose cut-off, dose increment, carb ratios with custom time windows, nutrition + weight goals, Apple Health permissions screen, integrations. |
+| **Eintragen** | Blutzucker, Kohlenhydrate (geschätzt / gewogen) und NovoRapid-Einheiten, dazu Jetzt / −15 / −30 / −1 h, dann Speichern. Ohne Kohlenhydrate zählt eine Dosis als Korrektur, ein Wert allein ist eine Messung. Darunter stehen die letzten Einträge mit Ergebnis (Passt / Zu wenig / Zu viel Insulin / Wartet auf Werte). Antippen → Löschen. |
+| **Dein System** | Pro Tageszeit (morgens 5–11, mittags 11–16, abends 16–22, spät) der KE-Faktor, den deine **passenden** Mahlzeiten benutzt haben, mit Beispiel. Jede Mahlzeit ist ein Punkt auf der Skala „mehr ↔ weniger Insulin“, damit man sieht, wie stark die Dosen streuen. Dazu kommen die Wirkung einer Korrektur (mg/dL pro IE) und ein Tresiba-Check für die Nacht. Über das Zahnrad: Einheit, Dexcom Share, alle Daten löschen. |
 
-Also: unified timeline (`/timeline`), weight tracker with 7D/30D/3M/1Y/All, BMI, body fat and lean mass (`/weight`).
+Beim ersten Start: kurze Erklärung, Einheit wählen, leer starten oder Beispieldaten ansehen.
 
-## Safety design
+### Wie das System entsteht (`src/domain/system/analyze.ts`, mit Tests)
 
-- `src/domain/bolus/engine.ts` is pure and deterministic: no clock, no I/O, no AI.
-  `meal = carbs ÷ ratio`, `correction = (glucose − target) ÷ CF`, `suggested = meal + correction − IOB`, then in order: **low-glucose block → floor at 0 → round *down* to the dose increment → cap at max bolus**.
-- Every result carries its steps (formula + value), warnings and `calculationVersion`; saved calculations keep inputs and the confirmed amount (both suggested and taken are stored).
-- Trend and planned activity only produce warnings — they never change the number.
-- Nothing changes settings automatically. Insights describe outcomes and at most suggest *reviewing* a setting; `containsDoseInstruction()` filters any insight that reads like a dose instruction, and tests enforce it.
-- Active insulin uses the OpenAPS exponential curve (`src/domain/insulin/iob.ts`).
+- **Mahlzeit bewerten:** Wert ca. 3 h nach dem Essen (Fenster 2,5–4 h, ein eingetippter Wert zählt auch) gegen den Startwert. Innerhalb von ±40 mg/dL → **passt**. Mehr als 40 darüber oder eine Korrektur 20 min – 3 h danach → **zu wenig Insulin**. Mehr als 40 darunter oder unter 70 innerhalb von 4 h → **zu viel Insulin**.
+- **Zählt nicht für den Faktor:** Start außerhalb 70–180 (dann steckt eine Korrektur in der Dosis), eine zweite Mahlzeit innerhalb von 3 h, unter 10 g Kohlenhydrate. Ohne Wert nach 3 h wartet gluciq bis zu 8 h (Dexcom → Apple Health ≈ 3 h Verzögerung), danach „Kein Wert nach 3 h“.
+- **Faktor pro Tageszeit:** ab 3 passenden Mahlzeiten der Median ihrer Verhältnisse (g pro IE, auf 0,5 gerundet), ab 6 „ziemlich sicher“. Davor nur eine Richtung, wenn ≥ 60 % zu hoch oder zu niedrig liefen. Gezählt werden nur die letzten 4 Wochen.
+- **Korrektur:** saubere Korrekturen ohne Essen 3 h davor und danach (bestehendes `analyzeCorrections`), ab 4 Stück.
+- **Tresiba:** Nächte ohne Essen und NovoRapid ab 21 Uhr, Veränderung von 1 bis 6 Uhr mit CGM-Werten. Ab 3 Nächten: stabil / steigt / fällt / Unterzucker (≥ 2 Nächte unter 70) / uneinheitlich.
+- Beschreibt nur die Daten. Nichts wird automatisch eingestellt. Die Hinweise sagen ausdrücklich, dass der Faktor mit dem Diabetologen besprochen werden soll.
 
-## Setpoints
-
-Under the suggested amount on the Bolus screen, **“You’ll take”** lets you change the dose (− / + in dose steps, or type it). As soon as it differs from the suggestion, a **“Use as … setpoint”** switch appears (it is also on the confirm screen). gluciq turns the dose into a carb ratio for that meal type:
-
-```
-mealUnits = unitsTaken − correction + activeInsulin      e.g. 16 − 0.4 + 0 = 15.6 U
-ratio     = carbs ÷ mealUnits                            e.g. 72 g ÷ 15.6 U = 1 U : 4.6 g
-```
-
-- From then on the calculator uses that ratio for the meal type (labelled “Your setpoint”, with **Reset** back to the previous ratio). The next 60 g breakfast is 60 ÷ 4.6 = 13.0 U.
-- “Learning” starts at the setpoint: a setpoint card compares meals since it with the meals before it (2 h outcomes), and similar-meal history only counts meals since the setpoint.
-- Only you create, replace or reset a setpoint. Editing that ratio in Diabetes settings ends it. Changes over ×2 either way are refused, over 25 % get a caution, and the max bolus still applies.
-- Logic: `src/domain/bolus/setpoint.ts`, `src/domain/insights/setpoints.ts` (with tests).
-
-The demo data includes a breakfast setpoint from 14 days ago (1 U : 5 g → 1 U : 4.6 g).
-
-## Onboarding
-
-On first launch a six-step setup asks for name, glucose unit and target, how you measure (Dexcom / Libre / other CGM / meter), correction factor, insulin duration, carb ratios, safety limits (max bolus, no-insulin threshold, dose step, prototype acknowledgement) and nutrition goals. You can keep the sample history or start empty, or skip setup and explore the sample profile. Profile → *Run setup again* reopens it with your current values.
-
-## Delayed sensor data
-
-Apple Health receives some CGM data hours late (Dexcom: about 3 h). gluciq therefore only pre-fills the Bolus calculator with a sensor value that is at most 15 minutes old (`SENSOR_FRESH_MIN`). Otherwise the field stays empty with a hint to type in the value from the CGM app, an optional trend can be picked, and the typed value is saved as a reading with the bolus. Active insulin is never delayed (doses are logged in gluciq), and learning uses the delayed data once it arrives.
-
-**Matching typed values to delayed sensor data** (`src/domain/glucose/matching.ts`): sensor readings carry their measurement time, so when they arrive, each typed value is linked to the sensor reading within ±10 min whose value is closest (people often read the CGM app a few minutes before typing). Agreement uses the ISO 15197 band (±15 mg/dL below 100, ±15 % above). Once matched, the typed value is dropped from charts, stats and learning (the sensor reading replaces it), while the bolus calculation keeps a link to it. Timeline and calculation history show “Waiting for Dexcom data”, “Dexcom 141 (−9) · matches” or “… differs — check the value”.
-
-Prototype only: choosing Dexcom in setup (with sample history) holds back the last 3 h of sample readings; they arrive over time, or at once via Profile → *Simulate Apple Health sync*.
+Die früheren Screens (Home, Food, Bolus-Rechner, Insights, Profil, Onboarding, Gewicht, Timeline) sind aus der App entfernt und in der Git-Historie (bis `b560a58`) noch vorhanden. Die Domain-Logik dahinter (Bolus-Engine, Setpoints, Vorschläge, Matching) ist noch da und getestet.
 
 ## Dexcom Share (live values)
 
-Profile → Integrations → **Dexcom Share**: region, Dexcom username and password. gluciq logs in to Dexcom's Share service (the one the Dexcom Follow app uses; also used by pydexcom, Nightscout and xDrip), loads the last 24 h and then polls every 5 minutes. Readings arrive as live sensor values with Dexcom's trend arrow, so the Bolus calculator is pre-filled and the 3-hour Apple Health delay disappears. Later Apple Health copies of the same readings are de-duplicated (±2.5 min).
+System → ⚙︎ → **Dexcom Share**: region, Dexcom username and password. gluciq logs in to Dexcom's Share service (the one the Dexcom Follow app uses; also used by pydexcom, Nightscout and xDrip), loads the last 24 h and then polls every 5 minutes. Readings arrive as live sensor values with Dexcom's trend arrow, so meals are judged without waiting for the 3-hour Apple Health delay. Later Apple Health copies of the same readings are de-duplicated (±2.5 min).
 
 - Credentials are stored only in the device keychain (`expo-secure-store`) and sent only to Dexcom; the app reconnects on start.
 - Requirements: Share turned on in the Dexcom app with at least one follower.
 - Unofficial: Dexcom can change this service; gluciq then falls back to typed values + Apple Health.
 - Browsers block Dexcom's server (no CORS), so it works in the native app. The web preview offers “Try with simulated values”.
-- Code: `src/services/dexcomShare/` (client with tests), `src/store/useDexcomShare.ts`, `src/app/profile/dexcom.tsx`. It has not yet been run against a real Dexcom account.
-
-## Corrections
-
-- **Log one:** Home → **+ Insulin** → type **Correction** (the default), or use the Bolus tab with **0 g carbs** for a calculated correction (saved as a correction).
-- **Active insulin:** every rapid dose, meal or correction, counts as insulin on board and is subtracted in the next calculation.
-- **Meal learning:** a meal followed by a correction (20 min – 3 h later) counts as having run high, even if the 2 h reading looks fine. Correction doses are never mistaken for the meal dose. Untagged doses are classified by timing (within 45 min of a meal → meal dose).
-- **Correction learning:** `analyzeCorrections` looks at clean corrections (no meal 2.5 h before / 3 h after, no other rapid insulin ±3 h), measures the drop per unit (lowest reading 2–4 h later), and compares the median with your correction factor. More than 20 % off, or repeated lows after corrections → suggests reviewing the correction factor. It never changes it.
-- **Correction setpoint:** with 0 g carbs, taking a different amount than suggested offers “Use as correction setpoint”: `CF = (glucose − target) ÷ (units taken + IOB)`, e.g. 215 mg/dL, target 110, took 2 U instead of 3 U → 1 U : 53 mg/dL. It then applies to corrections and to the correction part of meal boluses, can be reset, ends when you edit the factor by hand, and the correction card tracks only corrections since it.
-- Logic: `src/domain/insulin/purpose.ts`, `src/domain/insights/corrections.ts`, `src/domain/bolus/setpoint.ts`, `bolusEvents.ts`, `similarMeals.ts` (with tests).
-
-## One-tap learning
-
-gluciq turns what it learns into concrete setting suggestions you accept with one tap (Bolus tab, for the meal you are calculating, and Insights → Suggestions). `src/domain/insights/suggestions.ts`:
-
-- **Carb ratio per meal:** ≥ 6 meals since the ratio last changed, ≥ 50 % ran high (above target at 2 h or corrected within the insulin duration), and no lows → 5 % more insulin (10 % if ≥ 75 % ran high). 2 lows within 4 h → 10 % less insulin, even with few meals.
-- **Correction factor:** ≥ 4 usable corrections and no lows → one 10 % step toward the observed effect, never past it; 2 lows after corrections → 10 % less.
-- Accepting makes it a setpoint (resettable), learning restarts from the change, and nothing new is suggested for 7 days after a change or “Not now”. Nothing is ever applied without a tap.
-
-Correction learning also uses corrections given while meal insulin is still active: the part of that insulin acting during the measurement comes from the action curve (your insulin, e.g. NovoRapid, peak ≈ 75 min) and is added to the units. Corrections with carbs still absorbing (3 h, 5 h after ≥ 30 g fat), food soon after, or exercise are left out.
+- Code: `src/services/dexcomShare/` (client with tests), `src/store/useDexcomShare.ts`, `src/app/dexcom.tsx`. It has not yet been run against a real Dexcom account.
 
 ## Saved data
 
-Everything you log and set (readings, doses, meals, weight, settings, setpoints, learning state) is saved on the device: SQLite (`expo-sqlite/kv-store`) on iOS, `localStorage` in the browser. Saves are batched (≈ 1 s after the last change) and written immediately when the app goes to the background. Unfinished calculations are never saved. The app waits until saved data is loaded before showing anything, so nothing can overwrite it on start. The saved format is versioned (`STORAGE_VERSION`) for future migrations. Profile → Your data → Delete all data removes everything and disconnects Dexcom Share (two taps).
+Everything you log and set (readings, doses, meals, weight, settings, setpoints, learning state) is saved on the device: SQLite (`expo-sqlite/kv-store`) on iOS, `localStorage` in the browser. Saves are batched (≈ 1 s after the last change) and written immediately when the app goes to the background. Unfinished calculations are never saved. The app waits until saved data is loaded before showing anything, so nothing can overwrite it on start. The saved format is versioned (`STORAGE_VERSION`) for future migrations. System → ⚙︎ → Alle Daten löschen removes everything and disconnects Dexcom Share (two taps).
 
 ## Architecture
 
 ```
 src/
-  app/                 Expo Router routes: (tabs)/, log/, food/, bolus/, profile/, timeline, weight
+  app/                 Expo Router routes: (tabs)/index (Eintragen), (tabs)/system, start, settings, dexcom
   components/          cards/, charts/ (SVG line, bar, ring), forms/, navigation/ (floating glass tab bar), typography/, ui/
-  domain/              pure, tested logic: bolus/, glucose/, insulin/, nutrition/, insights/
-  features/            screen-level pieces (bolus form + result card, glucose hero, logging)
+  domain/              pure, tested logic: system/ (Dein System), bolus/, glucose/, insulin/, nutrition/, insights/
+  features/system/     outcome labels
   services/            persistence/ (debounced local saving), dexcomShare/, foodDatabase/ (provider interface, mock + Open Food Facts), healthkit/ (interface + stub),
                        supabase/ (sync interface + schema.sql)
   store/               Zustand store (local-first source of truth)
@@ -122,7 +76,7 @@ src/
 
 ## Next steps
 
-1. Sync and backup: Supabase using `services/supabase/schema.sql` (local saving is done).
-2. HealthKit: implement `HealthService` in a development build (e.g. `@kingstinct/react-native-healthkit`).
-3. Switch `foodDatabase` to Open Food Facts (already implemented) merged with custom foods.
-4. CGM integrations, photo recognition, reports — the domain and service boundaries are set up for these.
+1. Use it for 2 weeks with real data, then check the factors with the diabetologist.
+2. Test Dexcom Share with a real account (in the iPhone app; it needs Share turned on and one follower).
+3. HealthKit, if Share is not an option: implement `HealthService` in a development build (e.g. `@kingstinct/react-native-healthkit`).
+4. Once the factors are set: show the dose by the agreed system on the Eintragen tab (the bolus engine is still there).

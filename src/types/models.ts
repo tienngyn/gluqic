@@ -105,6 +105,8 @@ export type Meal = {
   fat: number;
   fiber?: number;
   sugar?: number;
+  /** Carbs were weighed (true) or estimated (false); unknown for older entries. */
+  carbsWeighed?: boolean;
   timestamp: string;
 };
 

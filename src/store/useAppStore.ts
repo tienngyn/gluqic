@@ -109,7 +109,15 @@ type Actions = {
   addInsulin: (d: Omit<InsulinDose, 'id' | 'userId'>) => void;
   addWeight: (w: Omit<WeightEntry, 'id' | 'userId'>) => void;
   addNote: (text: string, timestamp?: string) => void;
-  logMealItems: (mealType: MealType, items: Omit<MealItem, 'id'>[], opts?: { name?: string; timestamp?: string }) => Meal;
+  logMealItems: (
+    mealType: MealType,
+    items: Omit<MealItem, 'id'>[],
+    opts?: { name?: string; timestamp?: string; carbsWeighed?: boolean },
+  ) => Meal;
+  /** Removes everything logged at exactly this time (one entry on the Eintragen tab). */
+  deleteEntry: (timestamp: string) => void;
+  /** First start of the reduced app: empty (or sample) data, NovoRapid + Dexcom. */
+  startObservation: (opts: { glucoseUnit: UserProfile['glucoseUnit']; keepSampleData: boolean }) => void;
   addCustomFood: (food: Omit<FoodItem, 'id' | 'source'>) => FoodItem;
   saveMealTemplate: (name: string, mealType: MealType, items: MealItem[]) => void;
   saveBolus: (calc: Omit<BolusCalculation, 'id'>) => BolusCalculation;
@@ -234,11 +242,46 @@ export const useAppStore = create<State & Actions>()(
           fat: n.fat,
           fiber: n.fiber,
           sugar: n.sugar,
+          carbsWeighed: opts.carbsWeighed,
           timestamp: opts.timestamp ?? new Date().toISOString(),
         };
         set((s) => ({ meals: insertSorted(s.meals, meal) }));
         return meal;
       },
+
+      deleteEntry: (timestamp) =>
+        set((s) => ({
+          glucose: s.glucose.filter((g) => g.source !== 'manual' || g.timestamp !== timestamp),
+          meals: s.meals.filter((m) => m.timestamp !== timestamp),
+          insulin: s.insulin.filter((d) => d.timestamp !== timestamp),
+        })),
+
+      startObservation: ({ glucoseUnit, keepSampleData }) =>
+        set((s) => {
+          const now = new Date().toISOString();
+          const base = {
+            user: { ...s.user, name: '', glucoseUnit, glucoseSource: 'dexcom' as const, createdAt: now },
+            insulinProfile: { ...s.insulinProfile, rapidInsulin: 'novorapid' as const, insulinPeakMinutes: 75 },
+            onboarded: true,
+            bolusDraft: null,
+            pendingBolus: null,
+          };
+          if (keepSampleData) return base;
+          return {
+            ...base,
+            glucose: [],
+            delayedGlucose: [],
+            insulin: [],
+            meals: [],
+            activities: [],
+            weights: [],
+            notes: [],
+            bolusHistory: [],
+            setpoints: [],
+            correctionSetpoints: [],
+            lastSavedBolusId: null,
+          };
+        }),
 
       addCustomFood: (food) => {
         const item: FoodItem = { ...food, id: uid('food'), source: 'custom' };

@@ -22,11 +22,6 @@ const theme = {
   },
 };
 
-const sheet = {
-  presentation: 'modal',
-  contentStyle: { backgroundColor: colors.surface },
-} as const;
-
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -35,22 +30,9 @@ export default function RootLayout() {
           <StatusBar style="light" />
           <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="onboarding" options={{ gestureEnabled: false, animation: 'fade' }} />
-            <Stack.Screen name="log/glucose" options={sheet} />
-            <Stack.Screen name="log/insulin" options={sheet} />
-            <Stack.Screen name="log/weight" options={sheet} />
-            <Stack.Screen name="food/add" options={sheet} />
-            <Stack.Screen name="food/[id]" options={sheet} />
-            <Stack.Screen name="food/scan" options={{ presentation: 'fullScreenModal' }} />
-            <Stack.Screen name="food/custom" options={sheet} />
-            <Stack.Screen name="bolus/confirm" options={sheet} />
-            <Stack.Screen name="bolus/history" />
-            <Stack.Screen name="timeline" />
-            <Stack.Screen name="weight" />
-            <Stack.Screen name="profile/diabetes" />
-            <Stack.Screen name="profile/goals" />
-            <Stack.Screen name="profile/health" />
-            <Stack.Screen name="profile/dexcom" />
+            <Stack.Screen name="start" options={{ gestureEnabled: false, animation: 'fade' }} />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="dexcom" />
           </Stack>
         </ThemeProvider>
       </SafeAreaProvider>

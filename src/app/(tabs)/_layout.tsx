@@ -3,7 +3,9 @@ import { TabList, Tabs, TabSlot, TabTrigger } from 'expo-router/ui';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { BolusTabButton, FloatingTabBar, TAB_ICONS, TabButton } from '@/components/navigation/TabBar';
+import { ChartSpline, PenLine } from 'lucide-react-native';
+
+import { FloatingTabBar, TabButton } from '@/components/navigation/TabBar';
 import { colors } from '@/constants/theme';
 import { useNow } from '@/hooks/useDerived';
 import { useAppStore, useHydrated } from '@/store/useAppStore';
@@ -34,26 +36,17 @@ export default function TabLayout() {
 
   // Saved data is still loading: show the plain background, not setup or sample data.
   if (!hydrated) return <View style={styles.root} />;
-  if (!onboarded) return <Redirect href="/onboarding" />;
+  if (!onboarded) return <Redirect href="/start" />;
   return (
     <Tabs style={styles.root}>
       <TabSlot style={styles.slot} />
       <TabList asChild>
         <FloatingTabBar>
           <TabTrigger name="index" href="/" asChild>
-            <TabButton icon={TAB_ICONS.home} label="Home" />
+            <TabButton icon={PenLine} label="Eintragen" />
           </TabTrigger>
-          <TabTrigger name="food" href="/food" asChild>
-            <TabButton icon={TAB_ICONS.food} label="Food" />
-          </TabTrigger>
-          <TabTrigger name="bolus" href="/bolus" asChild>
-            <BolusTabButton />
-          </TabTrigger>
-          <TabTrigger name="insights" href="/insights" asChild>
-            <TabButton icon={TAB_ICONS.insights} label="Insights" />
-          </TabTrigger>
-          <TabTrigger name="profile" href="/profile" asChild>
-            <TabButton icon={TAB_ICONS.profile} label="Profile" />
+          <TabTrigger name="system" href="/system" asChild>
+            <TabButton icon={ChartSpline} label="System" />
           </TabTrigger>
         </FloatingTabBar>
       </TabList>
