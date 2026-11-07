@@ -69,9 +69,43 @@ function doPost(e) {
   }
 }
 
-/** Zum Testen im Browser: zeigt, ob die Web-App läuft. */
-function doGet() {
-  return reply('gluciq läuft');
+/**
+ * Ohne Parameter: zeigt im Browser, ob die Web-App läuft.
+ * Mit ?token=…&days=28: gibt Einträge, Dexcom-Werte und „Mein System“ der letzten Tage als JSON zurück
+ * (für die tägliche Auswertung durch Claude). Ohne richtigen Code gibt es keine Daten.
+ */
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  if (!p.token) return reply('gluciq läuft');
+  if (p.token !== TOKEN) return json({ error: 'falscher Code' });
+  const days = Math.min(90, Math.max(1, toNumber(p.days) || 28));
+  return json(exportData(new Date(Date.now() - days * 86400000)));
+}
+
+function exportData(since) {
+  const ss = SpreadsheetApp.getActive();
+  const rows = (name, cols) => {
+    const sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return [];
+    return sh.getRange(2, 1, sh.getLastRow() - 1, cols).getValues().filter((r) => r[0] instanceof Date && r[0] >= since);
+  };
+  const iso = (d) => Utilities.formatDate(d, TZ, "yyyy-MM-dd'T'HH:mm:ssXXX");
+  const num = (v) => toNumber(v);
+  return {
+    timeZone: TZ,
+    generated: iso(new Date()),
+    entries: rows(ENTRIES, 7).map((r) => ({
+      t: iso(r[0]),
+      bg: num(r[1]),
+      carbs: num(r[2]),
+      weighed: r[3] === 'ja' ? true : r[3] === 'nein' ? false : null,
+      units: num(r[4]),
+      note: String(r[5] || ''),
+      suggested: num(r[6]),
+    })),
+    sensor: rows(SENSOR, 2).map((r) => [iso(r[0]), num(r[1])]),
+    system: readSystem(),
+  };
 }
 
 // ---------------------------------------------------------------- Phase 2: Vorschlag
