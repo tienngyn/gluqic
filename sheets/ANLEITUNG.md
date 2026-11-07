@@ -2,27 +2,42 @@
 
 Dreimal hinten aufs iPhone tippen → Blutzucker, Kohlenhydrate, NovoRapid eingeben (später: Vorschlag bekommen) → landet in der Tabelle **„gluciq – Einträge“** in deinem Google Drive. Claude liest die Tabelle und wertet sie aus.
 
-Du brauchst einmal ca. 15 Minuten. Schritt 1 geht am besten am Computer.
+Du brauchst einmal ca. 20 Minuten. Alles geht am iPhone.
 
 ---
 
-## 1. Skript in die Tabelle einfügen (Computer, ca. 5 min)
+## 1. Skript in die Tabelle einfügen (ca. 10 min, geht auch am iPhone)
 
-1. Öffne die Tabelle **„gluciq – Einträge“** in Google Drive.
-2. Menü **Erweiterungen → Apps Script**.
-3. Lösche alles im Editor und füge den Inhalt von **Code.gs** ein (die Datei mit deinem Code darin, die Claude dir geschickt hat).
-4. Oben auf **Speichern** (Disketten-Symbol).
-5. Oben rechts **Bereitstellen → Neue Bereitstellung**.
+Die Google-Sheets-App hat das Menü „Erweiterungen“ nicht. Am iPhone geht es deshalb über **Safari mit der Desktop-Ansicht**. Am besten hältst du das iPhone **quer**.
+
+**a) Skript kopieren**
+1. Öffne in der **Google-Docs-App** das Dokument **„gluciq – Skript zum Kopieren“** (liegt in deinem Drive).
+2. Auf den Stift tippen (Bearbeiten), dann lange in den Text tippen → **Alles auswählen** → **Kopieren**.
+
+**b) Apps Script öffnen**
+1. Öffne **Safari** und gehe auf **drive.google.com**. Melde dich an, falls nötig.
+2. Tippe links in der Adressleiste auf **aA** → **Desktop-Website anfordern**.
+3. Öffne die Tabelle **„gluciq – Einträge“**. Öffnet sich stattdessen die Sheets-App: zurück zu Safari, die Tabelle lange drücken → **In neuem Tab öffnen**.
+4. Im Menü oben: **Erweiterungen → Apps Script**. Es öffnet sich ein neuer Tab mit einem Code-Editor.
+
+**c) Einfügen und speichern**
+1. Im Editor steht schon `function myFunction() { }`. Tippe hinein, lange drücken → **Alles auswählen** → **Einsetzen**. So ersetzt du es durch das kopierte Skript.
+2. Oben auf **Speichern** (Disketten-Symbol).
+
+**d) Bereitstellen**
+1. Oben rechts **Bereitstellen → Neue Bereitstellung**.
    - Zahnrad neben „Typ auswählen“ → **Web-App**
    - Ausführen als: **Ich**
    - Zugriff: **Jeder**
-   - **Bereitstellen** → Google fragt nach Berechtigungen → dein Konto wählen → „Erweitert“ → „gluciq (unsicher) öffnen“ → **Zulassen**.
-     (Das erscheint, weil das Skript von dir selbst ist und nicht von Google geprüft wurde.)
-6. Kopiere die **Web-App-URL** (endet auf `/exec`) und schick sie dir aufs iPhone, z. B. per Notiz.
+2. **Bereitstellen** → Google fragt nach Berechtigungen → dein Konto wählen → „Erweitert“ → „gluciq (unsicher) öffnen“ → **Zulassen**.
+   (Das erscheint, weil das Skript von dir selbst ist und nicht von Google geprüft wurde.)
+3. Kopiere die **Web-App-URL** (endet auf `/exec`). Am besten legst du sie gleich in eine Notiz, du brauchst sie im Kurzbefehl.
 
-Test: Öffne die URL im Browser. Dort sollte „gluciq läuft“ stehen.
+Test: Öffne die URL in einem neuen Safari-Tab. Dort sollte „gluciq läuft“ stehen.
 
 > „Zugriff: Jeder“ heißt nur: Die URL nimmt Daten an, ohne dass du angemeldet bist. Ohne deinen geheimen Code schreibt sie aber nichts, und lesen kann darüber niemand etwas.
+
+Wenn der Editor am iPhone zu fummelig ist: Am Computer sind Schritte b–d in 5 Minuten erledigt. Im Menü der Tabelle **Erweiterungen → Apps Script**, sonst alles gleich.
 
 ---
 
